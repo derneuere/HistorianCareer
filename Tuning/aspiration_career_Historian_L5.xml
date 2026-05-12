@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L5 daily tasks: W3 Professor. -->
+<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration" n="aspiration_career_Historian_L5" s="TBD_INSTANCE_ID">
+  <T n="display_name">0xTBD_STBL_KEY_HC_LEVEL_5_TITLE</T>
+  <T n="display_description">0xTBD_STBL_KEY_HC_LEVEL_5_DAILY</T>
+  <L n="objectives">
+    <T>objective_HC_RunSuperviseDissertation</T>
+    <T>objective_HC_RunHabilitationLecture</T>
+  </L>
+</I>

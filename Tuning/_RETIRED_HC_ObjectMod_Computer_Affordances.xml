@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adds all five Historian interactions to the base "computer" object.
+  NOTE: shipping this as a full ObjectTuning override is brittle (will conflict with any
+  other mod that touches the computer). Prefer XML Injector at build time:
+
+      injector.add_affordances(["computer"], [
+          "HC_Interaction_TranscribeManuscript",
+          "HC_Interaction_AnalyzePrimarySource",
+          "HC_Interaction_PresentAtSymposium",
+          "HC_Interaction_HabilitationLecture",
+          "HC_Interaction_SuperviseDissertation",
+      ])
+
+  This XML is kept only as a fallback for installs without XML Injector.
+-->
+<I c="ObjectTuning" i="object" m="objects.object_tuning" n="HC_ObjectMod_Computer_Affordances" s="TBD_INSTANCE_ID">
+  <L n="affordances">
+    <T>HC_Interaction_TranscribeManuscript</T>
+    <T>HC_Interaction_AnalyzePrimarySource</T>
+    <T>HC_Interaction_PresentAtSymposium</T>
+    <T>HC_Interaction_HabilitationLecture</T>
+    <T>HC_Interaction_SuperviseDissertation</T>
+  </L>
+</I>

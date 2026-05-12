@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Long-form aspiration "Historian's Calling" — 4 tiers strung together.
+  Showed to the player as a pick-on-creation aspiration; completing T4 grants the
+  Habilitation Renown trait.
+-->
+<I c="AspirationTrack" i="aspiration" m="aspirations.aspiration_track" n="aspiration_track_HistorianCalling" s="TBD_INSTANCE_ID">
+  <T n="display_text">0xTBD_STBL_KEY_HC_ASPTRACK_NAME</T>
+  <T n="description_text">0xTBD_STBL_KEY_HC_ASPTRACK_DESC</T>
+  <T n="aspiration_category">KNOWLEDGE</T>
+  <L n="aspirations">
+    <T>aspiration_HistorianCalling_T1</T>
+    <T>aspiration_HistorianCalling_T2</T>
+    <T>aspiration_HistorianCalling_T3</T>
+    <T>aspiration_HistorianCalling_T4</T>
+  </L>
+  <!-- Reward trait awarded on full-track completion. -->
+  <T n="reward_trait">trait_HabilitationRenown</T>
+</I>

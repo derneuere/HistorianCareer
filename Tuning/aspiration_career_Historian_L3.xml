@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L3 daily tasks: Postdoc. -->
+<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration" n="aspiration_career_Historian_L3" s="TBD_INSTANCE_ID">
+  <T n="display_name">0xTBD_STBL_KEY_HC_LEVEL_3_TITLE</T>
+  <T n="display_description">0xTBD_STBL_KEY_HC_LEVEL_3_DAILY</T>
+  <L n="objectives">
+    <T>objective_HC_RunPresentAtSymposium</T>
+    <T>objective_HC_RunAnalyzePrimarySource</T>
+  </L>
+</I>

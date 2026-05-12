@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L1 daily tasks: HiWi work. Two simple objectives. -->
+<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration" n="aspiration_career_Historian_L1" s="TBD_INSTANCE_ID">
+  <T n="display_name">0xTBD_STBL_KEY_HC_LEVEL_1_TITLE</T>
+  <T n="display_description">0xTBD_STBL_KEY_HC_LEVEL_1_DAILY</T>
+  <L n="objectives">
+    <T>objective_HC_RunTranscribeManuscript_x2</T>
+    <T>objective_HC_ReadNonfictionBook</T>
+  </L>
+</I>

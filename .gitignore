@@ -1,0 +1,12 @@
+# Build artifacts
+Build/out/
+Build/s4tk-builder/node_modules/
+Build/s4tk-builder/package-lock.json
+
+# Compiled Python
+Scripts/**/__pycache__/
+Scripts/**/*.pyc
+
+# Editor noise
+.vscode/
+*.swp

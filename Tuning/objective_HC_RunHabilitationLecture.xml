@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<I c="Objective" i="objective" m="aspirations.aspiration_objective" n="objective_HC_RunHabilitationLecture" s="TBD_INSTANCE_ID">
+  <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_HABILITATION</T>
+  <V n="goal_value" t="absolute">
+    <T n="absolute">1</T>
+  </V>
+  <V n="objective_test" t="interaction_run_test">
+    <U n="interaction_run_test">
+      <L n="affordances">
+        <T>HC_Interaction_HabilitationLecture</T>
+      </L>
+      <T n="subject">Actor</T>
+    </U>
+  </V>
+</I>

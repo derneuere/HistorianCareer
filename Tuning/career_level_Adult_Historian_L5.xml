@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  L5: Professor:in (W3) — Lehrstuhl. Top pay, prestige hours.
+  Hardest gate: BOTH Research&Debate AND Writing must be 10 (mimics Habilitation requirement).
+  On promotion: award the Habilitation Renown trait.
+-->
+<I c="CareerLevel" i="career_level" m="careers.career_level" n="career_level_Adult_Historian_L5" s="TBD_INSTANCE_ID">
+  <T n="level_title">0xTBD_STBL_KEY_HC_LEVEL_5_TITLE</T>
+  <T n="level_description">0xTBD_STBL_KEY_HC_LEVEL_5_DESC</T>
+  <T n="simoleons_per_hour">340</T>
+  <T n="work_performance_progress_per_completion">5</T>
+  <T n="schedule">schedule_career_prestige_10_to_18</T>
+  <T n="level_aspiration">aspiration_career_Historian_L5</T>
+  <V n="outfit" t="default"/>
+
+  <V n="promotion_test" t="enabled">
+    <U n="enabled">
+      <L n="tests">
+        <V t="skill_range">
+          <U n="skill_range">
+            <T n="subject">Actor</T>
+            <T n="skill">statistic_skill_Adult_ResearchDebate</T>
+            <V n="skill_range_type" t="threshold">
+              <U n="threshold">
+                <T n="comparison">GREATER_OR_EQUAL</T>
+                <T n="value">10</T>
+              </U>
+            </V>
+          </U>
+        </V>
+        <V t="skill_range">
+          <U n="skill_range">
+            <T n="subject">Actor</T>
+            <T n="skill">statistic_skill_Adult_Writing</T>
+            <V n="skill_range_type" t="threshold">
+              <U n="threshold">
+                <T n="comparison">GREATER_OR_EQUAL</T>
+                <T n="value">10</T>
+              </U>
+            </V>
+          </U>
+        </V>
+      </L>
+    </U>
+  </V>
+
+  <!-- Reaching W3 grants the prestige trait. -->
+  <L n="gameplay_unlocks">
+    <V t="trait">
+      <U n="trait">
+        <T n="trait">trait_HabilitationRenown</T>
+      </U>
+    </V>
+  </L>
+</I>

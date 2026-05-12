@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The single career track for the Historian career. Levels in order L1..L5.
+  No branch_selection block is included because there is no branching.
+-->
+<I c="CareerTrack" i="career_track" m="careers.career_track" n="career_track_Adult_Historian" s="TBD_INSTANCE_ID">
+  <L n="career_levels">
+    <T>career_level_Adult_Historian_L1</T>
+    <T>career_level_Adult_Historian_L2</T>
+    <T>career_level_Adult_Historian_L3</T>
+    <T>career_level_Adult_Historian_L4</T>
+    <T>career_level_Adult_Historian_L5</T>
+  </L>
+</I>

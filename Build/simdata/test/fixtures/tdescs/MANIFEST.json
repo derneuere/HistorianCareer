@@ -1,0 +1,19 @@
+{
+  "_": "TDESCs to download from Lot 51's API. `path` is optional: if blank, the fetch script auto-resolves it via the search index (/api/simdex/search/tdesc?q=*). Override only when the auto-match picks the wrong file. `name` is the local filename — saved as <name>.tdesc into this directory.",
+  "defaultVersion": "1.124.55",
+  "entries": [
+    { "name": "Career",            "path": "" },
+    { "name": "CareerTrack",       "path": "" },
+    { "name": "CareerLevel",       "path": "" },
+    { "name": "Aspiration",        "path": "" },
+    { "name": "AspirationCareer",  "path": "" },
+    { "name": "AspirationTrack",   "path": "" },
+    { "name": "Objective",         "path": "" },
+    { "name": "Trait",             "path": "" },
+    { "name": "Buff",              "path": "" }
+  ],
+  "_note_chancecard": "CareerChanceCard has no standalone TDESC — the schema lives inline inside Career.tdesc as a nested tuple. The simdata library handles chance cards from the embedded definition.",
+  "_removed": [
+    { "name": "CareerChanceCard",  "reason": "embedded in Career.tdesc, no separate resource" }
+  ]
+}

@@ -1,0 +1,10 @@
+# Build artifacts
+dist/
+node_modules/
+package-lock.json
+
+# Test scratch
+coverage/
+
+# Fetched index cache (regeneratable, large)
+test/fixtures/tdescs/_index.json

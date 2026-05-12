@@ -1,0 +1,14 @@
+HC_ObjectMod_Computer_Affordances.xml has been retired.
+
+The same job is now done by the script-side injector in
+Scripts/historian_career/affordance_injector.py, which appends our affordances
+to every computer object at zone-load time instead of overriding EA's
+ObjectTuning resource wholesale.
+
+That gives us:
+  + zero runtime mod dependencies (no XML Injector needed)
+  + co-existence with other mods that touch the same objects
+  + automatic pickup of any new computer variants EA adds in future patches
+
+The file is kept (renamed with the _RETIRED_ prefix) for reference only;
+the s4tk package builder excludes any file starting with an underscore.

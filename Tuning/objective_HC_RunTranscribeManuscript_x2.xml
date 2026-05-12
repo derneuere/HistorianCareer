@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Daily-task objective: run the L1 interaction "Transcribe Manuscript" twice.
+  Uses the standard interaction-completion event listener.
+-->
+<I c="Objective" i="objective" m="aspirations.aspiration_objective" n="objective_HC_RunTranscribeManuscript_x2" s="TBD_INSTANCE_ID">
+  <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_TRANSCRIBE_X2</T>
+  <V n="goal_value" t="absolute">
+    <T n="absolute">2</T>
+  </V>
+  <V n="objective_test" t="interaction_run_test">
+    <U n="interaction_run_test">
+      <L n="affordances">
+        <T>HC_Interaction_TranscribeManuscript</T>
+      </L>
+      <T n="subject">Actor</T>
+    </U>
+  </V>
+</I>

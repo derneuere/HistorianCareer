@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  L2 — Doktorand:in (PhD Candidate): "Analyze Primary Source".
+  Gated on Historian Level >= 1 (i.e. they ran TranscribeManuscript at least once,
+  which already enforced the History-degree check).
+-->
+<I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_AnalyzePrimarySource" s="TBD_INSTANCE_ID">
+  <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_ANALYZE_PRIMARY_SOURCE</T>
+  <T n="pie_menu_category">HC_PieMenuCategory_Historian</T>
+  <V n="basic_content" t="one_shot">
+    <U n="one_shot">
+      <L n="loot_list">
+        <T>loot.basic_experience_pay_medium</T>
+        <T>HC_Loot_Add_HistorianLevel_Small</T>
+        <T>loot.buff_Focused_High</T>
+      </L>
+    </U>
+  </V>
+  <V n="test_globals" t="enabled">
+    <U n="enabled">
+      <L n="tests">
+        <V t="statistic">
+          <U n="statistic">
+            <T n="subject">Actor</T>
+            <T n="who">Actor</T>
+            <T n="stat">HC_Statistic_HistorianLevel</T>
+            <V n="value" t="threshold">
+              <U n="threshold">
+                <T n="comparison">GREATER_OR_EQUAL</T>
+                <T n="value">1</T>
+              </U>
+            </V>
+          </U>
+        </V>
+      </L>
+    </U>
+  </V>
+</I>

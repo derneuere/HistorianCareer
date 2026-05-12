@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adds +2 to the Historian level statistic on the acting Sim.
+  Referenced from L4 (Habilitation) and L5 (Supervise Dissertation) interactions.
+-->
+<I c="LootActions" i="action" m="interactions.utils.loot" n="HC_Loot_Add_HistorianLevel_Medium" s="TBD_INSTANCE_ID">
+  <L n="loot_actions">
+    <V t="statistics">
+      <U n="statistics">
+        <L n="operations">
+          <U>
+            <T n="statistic">HC_Statistic_HistorianLevel</T>
+            <U n="advertise_and_modify">
+              <T n="amount">2</T>
+              <T n="subject">Actor</T>
+            </U>
+          </U>
+        </L>
+      </U>
+    </V>
+  </L>
+</I>

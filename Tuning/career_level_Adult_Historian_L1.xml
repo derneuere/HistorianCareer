@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L1: Wissenschaftliche Hilfskraft (Research Assistant / HiWi). 20h/week, low pay. -->
+<I c="CareerLevel" i="career_level" m="careers.career_level" n="career_level_Adult_Historian_L1" s="TBD_INSTANCE_ID">
+  <T n="level_title">0xTBD_STBL_KEY_HC_LEVEL_1_TITLE</T>
+  <T n="level_description">0xTBD_STBL_KEY_HC_LEVEL_1_DESC</T>
+  <T n="simoleons_per_hour">40</T>
+  <T n="work_performance_progress_per_completion">10</T>
+
+  <!--
+    Work schedule. EA references a CareerSchedule snippet — use `schedule_part_time_morning`
+    (M/T/W/Th/F 09:00-13:00) as a stand-in until we author our own. If your install pins
+    the snippet under a different namespace, swap in the one shown by S4S's Cruiser.
+  -->
+  <T n="schedule">schedule_career_part_time_morning</T>
+
+  <!-- Daily task aspiration — what the player sees in the career UI. -->
+  <T n="level_aspiration">aspiration_career_Historian_L1</T>
+
+  <!-- Outfit: reuse default Adult outfits; per-level uniforms are a v1.1 polish item. -->
+  <V n="outfit" t="default"/>
+
+  <!-- No special unlocks at L1. -->
+  <L n="gameplay_unlocks"/>
+</I>

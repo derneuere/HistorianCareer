@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
+  <!-- Tracks Karrierestufe 0..5: 0 = no career yet, 1 = HiWi ... 5 = W3 Professor. -->
+  <T n="initial_value">0</T>
+  <T n="min_value">0</T>
+  <T n="max_value">5</T>
+  <T n="stat_type">COMMODITY</T>
+  <T n="remove_on_convergence">False</T>
+  <T n="persisted_tuning">True</T>
+</I>

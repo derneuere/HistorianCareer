@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chance card "Plagiatsvorwurf" / "Plagiarism Accusation".
+  Player is offered two responses; each outcome applies a different loot.
+
+  Fired at random on workdays once Sim is at L3+ — wire via career.tunable_chance_cards
+  (CareerLevel can list which chance cards may fire). To avoid bloating every level file,
+  the simplest pattern is to attach this card to the Career tuning's `chance_card_pool`
+  and let EA's scheduler pick.
+
+  This file is a TEMPLATE. Once it works, copy/rename for the other two cards:
+   - "Conference Invitation" (positive, low cost)
+   - "Drittmittel Grant Application" (gambling on Writing skill)
+-->
+<I c="CareerChanceCard" i="career_chance_card" m="careers.career_event_zone_director" n="career_chance_card_Historian_Plagiarism" s="TBD_INSTANCE_ID">
+  <T n="title">0xTBD_STBL_KEY_HC_CARD_PLAGIARISM_TITLE</T>
+  <T n="description">0xTBD_STBL_KEY_HC_CARD_PLAGIARISM_BODY</T>
+
+  <!-- Two response buttons. -->
+  <U n="response_option_a">
+    <T n="display_text">0xTBD_STBL_KEY_HC_CARD_PLAGIARISM_OPT_A</T>
+    <!-- "Disclose and apologize publicly" — reputation hit but career intact. -->
+    <L n="outcome_loot">
+      <T>loot.career_performance_loss_small</T>
+      <T>loot.buff_Embarrassed_High</T>
+    </L>
+  </U>
+  <U n="response_option_b">
+    <T n="display_text">0xTBD_STBL_KEY_HC_CARD_PLAGIARISM_OPT_B</T>
+    <!-- "Stonewall the accusation" — 50/50 result. EA's chance_outcome supports random branching. -->
+    <V n="outcome" t="random">
+      <U n="random">
+        <L n="outcomes">
+          <U>
+            <T n="weight">1</T>
+            <L n="loot">
+              <T>loot.career_performance_gain_small</T>
+              <T>loot.buff_Confidence_High</T>
+            </L>
+          </U>
+          <U>
+            <T n="weight">1</T>
+            <L n="loot">
+              <T>loot.career_demotion</T>
+              <T>loot.buff_Embarrassed_High</T>
+            </L>
+          </U>
+        </L>
+      </U>
+    </V>
+  </U>
+</I>
