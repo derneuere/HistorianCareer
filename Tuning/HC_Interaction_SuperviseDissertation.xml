@@ -1,62 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  L5 — Professor:in (W3): "Supervise Dissertation".
-  Top-tier loot. Gated on Historian Level >= 4 AND Research&Debate = 10 AND Writing = 10
-  (mimics the German Habilitation requirement to qualify for a Lehrstuhl).
--->
+<!-- L5 â€” Professor:in (W3): "Supervise Dissertation". -->
 <I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_SuperviseDissertation" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_SUPERVISE_DISSERTATION</T>
-  <T n="pie_menu_category">HC_PieMenuCategory_Historian</T>
-  <V n="basic_content" t="one_shot">
-    <U n="one_shot">
-      <L n="loot_list">
-        <T>loot.basic_experience_pay_large</T>
-        <T>HC_Loot_Add_HistorianLevel_Medium</T>
-        <T>loot.buff_Confidence_High</T>
-      </L>
-    </U>
-  </V>
-  <V n="test_globals" t="enabled">
-    <U n="enabled">
-      <L n="tests">
-        <V t="statistic">
-          <U n="statistic">
-            <T n="subject">Actor</T>
-            <T n="who">Actor</T>
-            <T n="stat">HC_Statistic_HistorianLevel</T>
-            <V n="value" t="threshold">
-              <U n="threshold">
-                <T n="comparison">GREATER_OR_EQUAL</T>
-                <T n="value">4</T>
-              </U>
-            </V>
-          </U>
-        </V>
-        <V t="skill_range">
-          <U n="skill_range">
-            <T n="subject">Actor</T>
-            <T n="skill">statistic_skill_Adult_ResearchDebate</T>
-            <V n="skill_range_type" t="threshold">
-              <U n="threshold">
-                <T n="comparison">GREATER_OR_EQUAL</T>
-                <T n="value">10</T>
-              </U>
-            </V>
-          </U>
-        </V>
-        <V t="skill_range">
-          <U n="skill_range">
-            <T n="subject">Actor</T>
-            <T n="skill">statistic_skill_Adult_Writing</T>
-            <V n="skill_range_type" t="threshold">
-              <U n="threshold">
-                <T n="comparison">GREATER_OR_EQUAL</T>
-                <T n="value">10</T>
-              </U>
-            </V>
-          </U>
-        </V>
-      </L>
+  <V n="basic_content" t="one_shot"/>
+  <V n="outcome" t="single">
+    <U n="single">
+      <U n="actions">
+        <L n="loot_list">
+          <T>HC_Loot_Add_HistorianLevel_Medium</T>
+        </L>
+      </U>
     </U>
   </V>
 </I>
