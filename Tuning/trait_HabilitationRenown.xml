@@ -2,12 +2,16 @@
 <!--
   Trait awarded at career L5 (W3 Professor) and as the long-aspiration reward.
   Effect: passive +Focused-low buff when on a Library lot; small writing-speed boost.
+
+  Per EA's Trait TDESC and the Trait_Hidden_JoinedFiftyMileHighClub_Teen golden:
+    - `trait_type` is a TunableEnumEntry (use `<E>` not `<T>`)
+    - there is no `is_personality_trait` field; the canonical signal that a trait
+      is non-personality is `trait_type=GAMEPLAY` (or HIDDEN/AWARD/etc).
 -->
 <I c="Trait" i="trait" m="traits.traits" n="trait_HabilitationRenown" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_TRAIT_RENOWN_NAME</T>
   <T n="trait_description">0xTBD_STBL_KEY_HC_TRAIT_RENOWN_DESC</T>
-  <T n="is_personality_trait">False</T>
-  <T n="trait_type">GAMEPLAY</T>
+  <E n="trait_type">GAMEPLAY</E>
   <!-- Loot applied when the trait is added. Re-uses an EA "+focused low" buff for now. -->
   <L n="loot_on_trait_add">
     <T>loot.buff_Focused_Low</T>

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- L2 daily tasks: PhD candidate. -->
-<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration" n="aspiration_career_Historian_L2" s="TBD_INSTANCE_ID">
-  <T n="display_name">0xTBD_STBL_KEY_HC_LEVEL_2_TITLE</T>
-  <T n="display_description">0xTBD_STBL_KEY_HC_LEVEL_2_DAILY</T>
+<!--
+  L2 daily tasks: PhD candidate.
+  See aspiration_career_Historian_L1.xml for notes on display fields.
+-->
+<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_career_Historian_L2" s="TBD_INSTANCE_ID">
   <L n="objectives">
     <T>objective_HC_RunAnalyzePrimarySource</T>
     <T>objective_HC_RunTranscribeManuscript_x2</T>

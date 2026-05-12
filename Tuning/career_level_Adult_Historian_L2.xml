@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- L2: Doktorand:in (PhD Candidate). Full 9-to-5, modest pay, research-heavy daily tasks. -->
-<I c="CareerLevel" i="career_level" m="careers.career_level" n="career_level_Adult_Historian_L2" s="TBD_INSTANCE_ID">
-  <T n="level_title">0xTBD_STBL_KEY_HC_LEVEL_2_TITLE</T>
-  <T n="level_description">0xTBD_STBL_KEY_HC_LEVEL_2_DESC</T>
+<!--
+  L2: Doktorand:in (PhD Candidate). Full 9-to-5, modest pay, research-heavy daily tasks.
+
+  Field names per EA CareerLevel TDESC; see career_level_Adult_Historian_L1.xml for notes.
+-->
+<I c="CareerLevel" i="career_level" m="careers.career_tuning" n="career_level_Adult_Historian_L2" s="TBD_INSTANCE_ID">
+  <T n="title">0xTBD_STBL_KEY_HC_LEVEL_2_TITLE</T>
+  <T n="title_description">0xTBD_STBL_KEY_HC_LEVEL_2_DESC</T>
   <T n="simoleons_per_hour">70</T>
-  <T n="work_performance_progress_per_completion">8</T>
   <T n="schedule">schedule_career_standard_9_to_5</T>
-  <T n="level_aspiration">aspiration_career_Historian_L2</T>
-  <V n="outfit" t="default"/>
-  <L n="gameplay_unlocks"/>
+  <T n="aspiration">aspiration_career_Historian_L2</T>
 </I>

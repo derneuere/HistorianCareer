@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Tier 4: "Hold a Lehrstuhl (W3)." Final tier — awards the reward trait. -->
-<I c="Aspiration" i="aspiration" m="aspirations.aspiration" n="aspiration_HistorianCalling_T4" s="TBD_INSTANCE_ID">
+<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T4" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T4_NAME</T>
-  <T n="display_description">0xTBD_STBL_KEY_HC_ASP_T4_DESC</T>
+  <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T4_DESC</T>
   <L n="objectives">
     <T>objective_HC_RunSuperviseDissertation</T>
   </L>
-  <!-- Reward applied on tier completion. -->
-  <L n="complete_loot_actions">
+  <!-- Reward applied on tier completion. Canonical EA field is `on_complete_loot_actions`. -->
+  <L n="on_complete_loot_actions">
     <V t="trait">
       <U n="trait">
         <T n="trait">trait_HabilitationRenown</T>

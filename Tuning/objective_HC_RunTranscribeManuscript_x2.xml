@@ -2,18 +2,21 @@
 <!--
   Daily-task objective: run the L1 interaction "Transcribe Manuscript" twice.
   Uses the standard interaction-completion event listener.
+
+  Field names per EA Objective TDESC; see objective_HC_ReadNonfictionBook.xml for notes.
 -->
-<I c="Objective" i="objective" m="aspirations.aspiration_objective" n="objective_HC_RunTranscribeManuscript_x2" s="TBD_INSTANCE_ID">
+<I c="Objective" i="objective" m="event_testing.objective_tuning" n="objective_HC_RunTranscribeManuscript_x2" s="TBD_INSTANCE_ID">
   <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_TRANSCRIBE_X2</T>
-  <V n="goal_value" t="absolute">
-    <T n="absolute">2</T>
+  <V n="objective_completion_type" t="iterations">
+    <U n="iterations">
+      <T n="iterations_required_to_pass">2</T>
+    </U>
   </V>
-  <V n="objective_test" t="interaction_run_test">
-    <U n="interaction_run_test">
+  <V n="objective_test" t="ran_interaction_test">
+    <U n="ran_interaction_test">
       <L n="affordances">
         <T>HC_Interaction_TranscribeManuscript</T>
       </L>
-      <T n="subject">Actor</T>
     </U>
   </V>
 </I>

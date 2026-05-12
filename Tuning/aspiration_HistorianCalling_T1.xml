@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Long aspiration tier 1: "Begin your career as a Historian (HiWi)." -->
-<I c="Aspiration" i="aspiration" m="aspirations.aspiration" n="aspiration_HistorianCalling_T1" s="TBD_INSTANCE_ID">
+<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T1" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T1_NAME</T>
-  <T n="display_description">0xTBD_STBL_KEY_HC_ASP_T1_DESC</T>
+  <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T1_DESC</T>
   <L n="objectives">
     <T>objective_HC_RunTranscribeManuscript_x2</T>
   </L>

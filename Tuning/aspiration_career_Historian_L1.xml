@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- L1 daily tasks: HiWi work. Two simple objectives. -->
-<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration" n="aspiration_career_Historian_L1" s="TBD_INSTANCE_ID">
-  <T n="display_name">0xTBD_STBL_KEY_HC_LEVEL_1_TITLE</T>
-  <T n="display_description">0xTBD_STBL_KEY_HC_LEVEL_1_DAILY</T>
+<!--
+  L1 daily tasks: HiWi work.
+
+  AspirationCareer's display name/description live under an `_display_data`
+  variant in EA's TDESC, not at root; EA's own AspirationCareer goldens omit
+  them entirely (e.g. aspiration_Culinary_Level5). The player sees the level
+  title from the parent CareerLevel's `title`/`title_description`.
+-->
+<I c="AspirationCareer" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_career_Historian_L1" s="TBD_INSTANCE_ID">
   <L n="objectives">
     <T>objective_HC_RunTranscribeManuscript_x2</T>
     <T>objective_HC_ReadNonfictionBook</T>
