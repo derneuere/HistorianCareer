@@ -1,27 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Historian career. Single track, 5 levels, modelled on the German academic Karriereleiter.
+  Historian career. Single track, 5 levels, modelled on the German academic
+  Karriereleiter.
 
-  Per EA's Career TDESC (Build/simdata/test/fixtures/tdescs/Career.tdesc.json) and
-  the career_Teen_Retail golden, a Career resource carries career_category and
-  start_track plus a handful of test/messaging/buff fields. The display name and
-  description live on the CareerTrack, not the Career — see
-  career_track_Adult_Historian.xml.
+  Per EA's Career TDESC (Build/simdata/test/fixtures/tdescs/Career.tdesc.json)
+  and the career_Adult_Writer / career_Teen_Retail goldens, a Career resource
+  carries a few mandatory fields (category, start_track, availability tests,
+  company_names, career_affordance, go_home_to_work_affordance, career_messages)
+  plus a handful of buff/modifier/test fields. The display name and description
+  live on the CareerTrack, not the Career — see career_track_Adult_Historian.xml.
+
+  Required for adult careers (this is what the smoke-test surfaced):
+    - company_names: non-empty list of STBL keys. The runtime picks one randomly
+      when the Sim joins; an empty list raises
+      `IndexError: Cannot choose from an empty sequence` from
+      `careers/career_location.py` (`TunableCareerLocationRandomCompanyWrapper`).
+    - career_affordance + go_home_to_work_affordance: the in-game affordances
+      that drive the "Join Career" interaction and the "Go Home From Work"
+      interaction. Reusing EA references is fine — `29941` is
+      `career_GoToWork_Writer` (well-matched to a research career), and `98770`
+      is the universal `career_GoHomeFromWork`.
+    - career_messages: the family of notifications shown around shifts, missed
+      work, promotions, demotions, firing, etc. Shape exactly mirrors EA's
+      career_Adult_Writer; we reuse EA's shipped STBL keys for the generic
+      "rough day at work"-style strings (0x57D2BC57 etc.) so we don't need to
+      author 8 new strings just for parity.
 
   Requires the History major from the Discover University EP. The trait reference
-  `trait_University_Major_History_Completed` is a PLACEHOLDER — confirm the exact EA
-  trait name in Sims 4 Studio's Game File Cruiser at build time (see IMPLEMENTATION_GUIDE.md
-  and issue #2). The list of candidate names is also baked into the Python safety
-  net in Scripts/historian_career/historian_career.py.
+  `trait_University_Major_History_Completed` is a PLACEHOLDER — confirm the exact
+  EA trait name in Sims 4 Studio's Game File Cruiser at build time (see
+  IMPLEMENTATION_GUIDE.md and issue #2). The list of candidate names is also
+  baked into the Python safety net in
+  Scripts/historian_career/historian_career.py.
+
+  career_category MUST be `Work` (not `CAREER`) — every EA adult career uses
+  this literal and the simdata enum maps it to value 1.
 -->
 <I c="Career" i="career" m="careers.career_tuning" n="career_Adult_Historian" s="TBD_INSTANCE_ID">
-  <E n="career_category">CAREER</E>
-  <T n="start_track">career_track_Adult_Historian</T>
+  <!-- 29941: EA career_GoToWork_Writer SI — thematically closest stand-in. -->
+  <T n="career_affordance">29941</T>
 
   <!--
-    Career availability test: only Sims who graduated with the History major can be hired.
-    The canonical EA field is `career_availablity_tests` (note the EA spelling — no second
-    'i' in "availability" — see Career.tdesc and the EA Teen Retail career golden).
+    Career availability tests:
+      1. trait whitelist: only Sims who graduated with the History major can be hired.
+      2. age list: adult-only career.
+    Both must pass.
   -->
   <L n="career_availablity_tests">
     <L>
@@ -33,5 +56,170 @@
         </U>
       </V>
     </L>
+    <L>
+      <V t="sim_info">
+        <U n="sim_info">
+          <V n="ages" t="specified">
+            <L n="specified">
+              <E>YOUNGADULT</E>
+              <E>ADULT</E>
+              <E>ELDER</E>
+            </L>
+          </V>
+        </U>
+      </V>
+    </L>
   </L>
+
+  <E n="career_category">Work</E>
+
+  <!--
+    Career messages: notification family. Shape mirrors career_Adult_Writer (live
+    game). Where possible we reuse EA's shipped generic STBL keys for the
+    nameless "rough day"/"missed work"/"join career"/"fire career" strings,
+    and we provide HC-specific titles/bodies where it makes the in-game UX feel
+    less generic. The `stat` reference (27784) is EA's Writer career_performance
+    stat — we reuse it for parity; once HC_Statistic_HistorianLevel is firmly
+    wired, swap to that.
+  -->
+  <U n="career_messages">
+    <V n="career_daily_end_notification" t="tested">
+      <U n="tested">
+        <L n="items">
+          <U>
+            <U n="item">
+              <V n="text" t="single">
+                <T n="single">0xTBD_STBL_KEY_HC_CAREER_DAILY_END_HIGH_PERF</T>
+              </V>
+            </U>
+            <L n="tests">
+              <L>
+                <V t="statistic">
+                  <U n="statistic">
+                    <T n="stat">HC_Statistic_HistorianLevel</T>
+                    <V n="threshold" t="value_threshold">
+                      <U n="value_threshold">
+                        <E n="comparison">GREATER_OR_EQUAL</E>
+                        <T n="value">60</T>
+                      </U>
+                    </V>
+                  </U>
+                </V>
+              </L>
+            </L>
+          </U>
+          <U>
+            <U n="item">
+              <V n="text" t="single">
+                <T n="single">0xTBD_STBL_KEY_HC_CAREER_DAILY_END_LOW_PERF</T>
+              </V>
+            </U>
+          </U>
+        </L>
+      </U>
+    </V>
+    <U n="career_missing_work">
+      <T n="affordance">77302</T>
+      <U n="dialog">
+        <V n="icon" t="enabled">
+          <V n="enabled" t="resource_key">
+            <U n="resource_key">
+              <T n="key" p="InGame\UI\Icons\Headlines\Final\headline_careersimoleons.png">2f7d0004:00000000:617140672fa22f7b</T>
+            </U>
+          </V>
+        </V>
+        <E n="phone_ring_type">RING</E>
+        <V n="text" t="single">
+          <T n="single">0xTBD_STBL_KEY_HC_CAREER_MISSING_WORK_NOTIFICATION</T>
+        </V>
+        <V n="title" t="enabled">
+          <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+        </V>
+      </U>
+    </U>
+    <U n="career_performance_warning">
+      <T n="affordance">77301</T>
+      <U n="dialog">
+        <V n="icon" t="enabled">
+          <V n="enabled" t="resource_key">
+            <U n="resource_key">
+              <T n="key" p="InGame\UI\Icons\Headlines\Final\headline_careersimoleons.png">2f7d0004:00000000:617140672fa22f7b</T>
+            </U>
+          </V>
+        </V>
+        <E n="phone_ring_type">RING</E>
+        <V n="text" t="single">
+          <T n="single">0xTBD_STBL_KEY_HC_CAREER_PERFORMANCE_WARNING</T>
+        </V>
+        <V n="title" t="enabled">
+          <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+        </V>
+      </U>
+      <U n="threshold">
+        <E n="comparison">LESS_OR_EQUAL</E>
+        <T n="value">-50</T>
+      </U>
+    </U>
+    <U n="demote_career_notification">
+      <V n="text" t="single">
+        <T n="single">0x89568E38</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0xA13D761D</T>
+      </V>
+    </U>
+    <U n="fire_career_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_FIRE_NOTIFICATION</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0x1FD4456D</T>
+      </V>
+    </U>
+    <U n="join_career_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_JOIN_NOTIFICATION</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+      </V>
+    </U>
+    <U n="promote_career_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_PROMOTE_NOTIFICATION</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0x54E0293D</T>
+      </V>
+    </U>
+    <U n="quit_career_notification">
+      <V n="text" t="single">
+        <T n="single">0xC55953D2</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0xAE185370</T>
+      </V>
+    </U>
+  </U>
+
+  <!--
+    Company names — pool the runtime picks from on join. Empty list was the root
+    cause of the smoke-test Exception 2. German academic institutions, thematic.
+  -->
+  <L n="company_names">
+    <T>0xTBD_STBL_KEY_HC_COMPANY_UNIVERSITAET_BERLIN</T>
+    <T>0xTBD_STBL_KEY_HC_COMPANY_PREUSSISCHER_KULTURBESITZ</T>
+    <T>0xTBD_STBL_KEY_HC_COMPANY_BUNDESARCHIV</T>
+    <T>0xTBD_STBL_KEY_HC_COMPANY_HUMBOLDT_INSTITUT</T>
+    <T>0xTBD_STBL_KEY_HC_COMPANY_LEIBNIZ_GESELLSCHAFT</T>
+  </L>
+
+  <T n="days_to_level_loss">2</T>
+
+  <!-- 98770: universal `career_GoHomeFromWork`. -->
+  <T n="go_home_to_work_affordance">98770</T>
+
+  <T n="levels_lost_on_leave">0</T>
+
+  <T n="start_track">career_track_Adult_Historian</T>
 </I>
