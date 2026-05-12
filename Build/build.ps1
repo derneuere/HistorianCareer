@@ -16,8 +16,30 @@ param(
     [switch]$PackageOnly,
     [switch]$ScriptOnly,
     [switch]$LayerB,           # Include the full Career/Aspiration set with auto-generated SimData
-    [string]$ModsFolder = "$HOME\Documents\Electronic Arts\The Sims 4\Mods\HistorianCareer"
+    [string]$ModsFolder        # If unset, auto-detected from the localized game folder
 )
+
+# Auto-detect the game's user-data folder. The Sims 4 localizes the folder name
+# based on game language (Die Sims 4 / Les Sims 4 / Los Sims 4 / etc.). Prefer
+# whichever sibling under "Documents\Electronic Arts\" contains an Options.ini
+# (the marker that the game has been launched and configured there).
+if (-not $ModsFolder) {
+    $eaDocs = Join-Path $HOME 'Documents\Electronic Arts'
+    $candidate = $null
+    if (Test-Path $eaDocs) {
+        $simsFolders = Get-ChildItem $eaDocs -Directory |
+            Where-Object { $_.Name -match '^(The|Die|Les|Los) Sims 4$' -or $_.Name -eq 'The Sims 4' }
+        # Prefer the one with Options.ini; fall back to the English name.
+        $candidate = $simsFolders | Where-Object { Test-Path (Join-Path $_.FullName 'Options.ini') } | Select-Object -First 1
+        if (-not $candidate) { $candidate = $simsFolders | Select-Object -First 1 }
+    }
+    if ($candidate) {
+        $ModsFolder = Join-Path $candidate.FullName 'Mods\HistorianCareer'
+    } else {
+        # Last-resort default: English. The game will create the localized one on first launch.
+        $ModsFolder = "$HOME\Documents\Electronic Arts\The Sims 4\Mods\HistorianCareer"
+    }
+}
 
 $ErrorActionPreference = 'Stop'
 $root      = Split-Path -Parent $PSScriptRoot
