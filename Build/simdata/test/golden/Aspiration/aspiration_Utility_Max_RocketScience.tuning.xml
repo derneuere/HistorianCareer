@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_Utility_Max_RocketScience" s="99699">
+  <T n="complete_only_in_sequence">False</T>
+  <L n="objectives">
+    <T>99700</T>
+  </L>
+</I>

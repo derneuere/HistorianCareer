@@ -1,0 +1,66 @@
+{
+  "pkgPath": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\The Sims 4\\Data\\Simulation\\SimulationFullBuild0.package",
+  "when": "2026-05-12T16:52:29.934Z",
+  "summary": [
+    {
+      "klass": "Trait",
+      "status": "ok",
+      "slug": "Trait_Hidden_JoinedFiftyMileHighClub_Teen",
+      "name": "Trait_Hidden_JoinedFiftyMileHighClub_Teen",
+      "instance": "189b2"
+    },
+    {
+      "klass": "Buff",
+      "status": "ok",
+      "slug": "buff_Pregnancy_NotShowing",
+      "name": "buff_Pregnancy_NotShowing",
+      "instance": "3110"
+    },
+    {
+      "klass": "Career",
+      "status": "ok",
+      "slug": "career_Teen_Retail",
+      "name": "career_Teen_Retail",
+      "instance": "8993"
+    },
+    {
+      "klass": "CareerTrack",
+      "status": "no-tuning"
+    },
+    {
+      "klass": "CareerLevel",
+      "status": "ok",
+      "slug": "career_SecretAgent_Villain_Level3",
+      "name": "career_SecretAgent_Villain_Level3",
+      "instance": "7c0c"
+    },
+    {
+      "klass": "Aspiration",
+      "status": "ok",
+      "slug": "aspiration_Utility_Max_RocketScience",
+      "name": "aspiration_Utility_Max_RocketScience",
+      "instance": "18573"
+    },
+    {
+      "klass": "AspirationCareer",
+      "status": "ok",
+      "slug": "aspiration_Culinary_Level5",
+      "name": "aspiration_Culinary_Level5",
+      "instance": "66fc"
+    },
+    {
+      "klass": "AspirationTrack",
+      "status": "ok",
+      "slug": "Track_Motor",
+      "name": "Track_Motor",
+      "instance": "645a"
+    },
+    {
+      "klass": "Objective",
+      "status": "ok",
+      "slug": "objective_Asp_Family_B4_3",
+      "name": "objective_Asp_Family_B4_3",
+      "instance": "64c8"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<I c="TunableCareerTrack" i="career_track" m="careers.career_tuning" n="GradeSchool_Track" s="12900">
+  <T n="busy_time_situation_picker_tooltip">0x96415585</T>
+  <T n="career_description">0x68057A0</T>
+  <L n="career_levels">
+    <T>12876</T>
+    <T>12875</T>
+    <T>12874</T>
+    <T>12873</T>
+    <T>12872</T>
+  </L>
+  <T n="career_name">0xBFA10CB4</T>
+  <T n="icon" p="InGame\UI\Icons\Career\Career_School_Main.png">2f7d0004:00000000:e6e93fb6cebaa4c6</T>
+  <T n="icon_high_res" p="InGame\UI\Icons\Career\Career_School_Main.png">2f7d0004:00000000:e6e93fb6cebaa4c6</T>
+  <T n="image" p="InGame\UI\Icons\resource_icon_bkg.png">2f7d0004:00000000:6665077284098fa2</T>
+</I>
