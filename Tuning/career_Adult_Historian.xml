@@ -2,51 +2,36 @@
 <!--
   Historian career. Single track, 5 levels, modelled on the German academic Karriereleiter.
 
+  Per EA's Career TDESC (Build/simdata/test/fixtures/tdescs/Career.tdesc.json) and
+  the career_Teen_Retail golden, a Career resource carries career_category and
+  start_track plus a handful of test/messaging/buff fields. The display name and
+  description live on the CareerTrack, not the Career — see
+  career_track_Adult_Historian.xml.
+
   Requires the History major from the Discover University EP. The trait reference
   `trait_University_Major_History_Completed` is a PLACEHOLDER — confirm the exact EA
-  trait name in Sims 4 Studio's Game File Cruiser at build time (see IMPLEMENTATION_GUIDE.md).
+  trait name in Sims 4 Studio's Game File Cruiser at build time (see IMPLEMENTATION_GUIDE.md
+  and issue #2). The list of candidate names is also baked into the Python safety
+  net in Scripts/historian_career/historian_career.py.
 -->
 <I c="Career" i="career" m="careers.career_tuning" n="career_Adult_Historian" s="TBD_INSTANCE_ID">
-  <T n="ages">YOUNGADULT,ADULT,ELDER</T>
-  <T n="career_category">CAREER</T>
-  <T n="career_name">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
-  <T n="career_description">0xTBD_STBL_KEY_HC_CAREER_DESCRIPTION</T>
+  <E n="career_category">CAREER</E>
   <T n="start_track">career_track_Adult_Historian</T>
 
   <!--
     Career availability test: only Sims who graduated with the History major can be hired.
-    EA uses a `career_availability_test` tunable on the Career resource for this kind of
-    gate. If the test name differs in your install, switch to an `application_test` block
-    or move this check onto the L1 promotion conditions instead.
+    The canonical EA field is `career_availablity_tests` (note the EA spelling — no second
+    'i' in "availability" — see Career.tdesc and the EA Teen Retail career golden).
   -->
-  <V n="career_availability_test" t="enabled">
-    <U n="enabled">
-      <L n="tests">
-        <V t="trait">
-          <U n="trait">
-            <T n="subject">Actor</T>
-            <L n="whitelist_traits">
-              <T>trait_University_Major_History_Completed</T>
-            </L>
-          </U>
-        </V>
-      </L>
-    </U>
-  </V>
-
-  <!--
-    Career notification messages. Each entry is a notification dialog shown on the
-    matching career event. We reference the EA defaults so the layout/icons look native;
-    overriding only the text via STBL keys would be a v1.1 refinement.
-  -->
-  <U n="career_messages">
-    <T n="career_message_join_career">notification.career_join_default</T>
-    <T n="career_message_promotion">notification.career_promotion_default</T>
-    <T n="career_message_demotion">notification.career_demotion_default</T>
-    <T n="career_message_fired">notification.career_fired_default</T>
-    <T n="career_message_retire">notification.career_retire_default</T>
-  </U>
-
-  <!-- Optional: rewards on retirement; left empty here. -->
-  <L n="retirement_rewards"/>
+  <L n="career_availablity_tests">
+    <L>
+      <V t="trait">
+        <U n="trait">
+          <L n="whitelist_traits">
+            <T>trait_University_Major_History_Completed</T>
+          </L>
+        </U>
+      </V>
+    </L>
+  </L>
 </I>

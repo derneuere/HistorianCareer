@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Tier 2: "Defend your PhD." -->
-<I c="Aspiration" i="aspiration" m="aspirations.aspiration" n="aspiration_HistorianCalling_T2" s="TBD_INSTANCE_ID">
+<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T2" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T2_NAME</T>
-  <T n="display_description">0xTBD_STBL_KEY_HC_ASP_T2_DESC</T>
+  <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T2_DESC</T>
   <L n="objectives">
     <T>objective_HC_RunAnalyzePrimarySource</T>
     <T>objective_HC_RunPresentAtSymposium</T>

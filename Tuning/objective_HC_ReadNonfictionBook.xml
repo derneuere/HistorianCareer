@@ -3,19 +3,27 @@
   Daily-task helper that reuses an existing EA interaction:
   "Read a Book" — filtered to non-fiction. Falls back to the generic ReadBook affordance
   if the non-fiction subtype filter doesn't resolve.
+
+  Per EA's Objective TDESC (Build/simdata/test/fixtures/tdescs/Objective.tdesc.json):
+    - module is `event_testing.objective_tuning` (not `aspirations.aspiration_objective`)
+    - completion progress is `objective_completion_type` (TunableVariant with `iterations`,
+      `tag_checklist`, etc.) — there is no `goal_value` field
+    - the test variant name for "Sim ran this interaction" is `ran_interaction_test`
+      (not `interaction_run_test`).
 -->
-<I c="Objective" i="objective" m="aspirations.aspiration_objective" n="objective_HC_ReadNonfictionBook" s="TBD_INSTANCE_ID">
+<I c="Objective" i="objective" m="event_testing.objective_tuning" n="objective_HC_ReadNonfictionBook" s="TBD_INSTANCE_ID">
   <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_READ_BOOK</T>
-  <V n="goal_value" t="absolute">
-    <T n="absolute">1</T>
+  <V n="objective_completion_type" t="iterations">
+    <U n="iterations">
+      <T n="iterations_required_to_pass">1</T>
+    </U>
   </V>
-  <V n="objective_test" t="interaction_run_test">
-    <U n="interaction_run_test">
+  <V n="objective_test" t="ran_interaction_test">
+    <U n="ran_interaction_test">
       <L n="affordances">
         <!-- EA's non-fiction read; swap to `book_Read` if this specific affordance is missing. -->
         <T>book_ReadBook_NonFiction</T>
       </L>
-      <T n="subject">Actor</T>
     </U>
   </V>
 </I>
