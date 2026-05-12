@@ -32,19 +32,22 @@ _HC_AFFORDANCE_NAMES = (
     "HC_Interaction_SuperviseDissertation",
 )
 
-# Computer object tunings to extend. The exact tuning names vary between EA patches;
-# the list below covers the standard base-game computer variants. If a name no longer
-# resolves in your install, find the current ones in Sims 4 Studio's Game File Cruiser
-# under Object Tuning → filter "computer".
+# Computer object tunings to extend. Names confirmed against the live game's
+# CombinedTuning (patch 1.124.55). EA also adds new computer variants in patches,
+# so we additionally fuzzy-match on the `object_computer*` / `object_Computer*`
+# name prefix (case-insensitive).
 _HC_COMPUTER_TUNINGS = (
-    "object_computerEconomic_2x1",
-    "object_computerBasic_2x1",
-    "object_computerHighEnd_2x1",
-    "object_computerGaming_2x1",
+    "object_computerLOW_01",
+    "object_computerDesktopMED_01",
+    "object_Computer_High",
+    "object_Computer_Tesla",
+    "object_Computer_DS",
+    "object_Computer_CrimSuitcase",
 )
 
-# Fallback: any object tuning whose name starts with this prefix is also treated as a computer.
-_HC_COMPUTER_NAME_PREFIX = "object_computer"
+# Fallback: any object tuning whose name starts with this prefix (case-insensitive)
+# is also treated as a computer. Catches future variants without code changes.
+_HC_COMPUTER_NAME_PREFIX_LOWER = "object_computer"
 
 _injected = False
 
@@ -91,12 +94,13 @@ def _inject_once():
             if obj is not None:
                 target_objects.add(obj)
 
-        # 2. Fuzzy fallback: any tuning whose canonical name starts with the prefix.
-        #    `types` is a dict { resource_key -> class }; iterate values.
+        # 2. Fuzzy fallback: any tuning whose canonical name starts with
+        #    "object_computer" (case-insensitive). EA's actual names mix
+        #    capitalisations (`object_computerLOW_01`, `object_Computer_Tesla`).
         try:
             for obj_cls in tuple(obj_mgr.types.values()):
                 cls_name = getattr(obj_cls, "__name__", "")
-                if isinstance(cls_name, str) and cls_name.startswith(_HC_COMPUTER_NAME_PREFIX):
+                if isinstance(cls_name, str) and cls_name.lower().startswith(_HC_COMPUTER_NAME_PREFIX_LOWER):
                     target_objects.add(obj_cls)
         except Exception as e:
             _log(f"Fuzzy lookup failed (continuing with allow-list): {e}")
