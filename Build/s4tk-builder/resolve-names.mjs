@@ -27,6 +27,11 @@
 // isolation (see resolve-names.test.mjs).
 
 import { fnv64 } from "@s4tk/hashing/hashing.js";
+import {
+  SMALL_ID_CLASSES,
+  smallInstanceIdFor,
+  assertNoCollisions,
+} from "./pie-menu-category-id.mjs";
 
 // Pattern that matches our project-owned tuning names. Anything we emit lives
 // under one of these prefixes today; adjust if new top-level naming families
@@ -68,12 +73,19 @@ function parseRootAttrs(attrString) {
  */
 export function collectTuningNames(xmlEntries) {
   const nameToInstance = new Map();
+  // Tracks the SMALL_ID subset for a focused collision check. The outer
+  // builder also checks ALL instance IDs for collisions, but a 31-bit narrowed
+  // space deserves a louder error message — see assertNoCollisions in
+  // pie-menu-category-id.mjs (issue #14).
+  const smallIds = new Map();
+
   for (const [file, xml] of xmlEntries) {
     const rootMatch = xml.match(/<I\s+([^>]+)>/);
     if (!rootMatch) continue;
     const attrs = parseRootAttrs(rootMatch[1]);
     const tuningName = attrs.n;
     if (!tuningName) continue;
+    const cAttr = attrs.c;
 
     let instance;
     const sAttr = attrs.s;
@@ -82,6 +94,13 @@ export function collectTuningNames(xmlEntries) {
       instance = BigInt(sAttr);
     } else if (sAttr && /^0[xX][0-9a-fA-F]+$/.test(sAttr)) {
       instance = BigInt(sAttr);
+    } else if (cAttr && SMALL_ID_CLASSES.has(cAttr)) {
+      // Tuning classes whose `category` references are constrained to 31-bit
+      // (issue #14 — PieMenuCategory). Use a masked fnv64 so cross-refs from
+      // SuperInteractions resolve to a value EA's TunableReference resolver
+      // accepts.
+      instance = smallInstanceIdFor(tuningName);
+      smallIds.set(tuningName, instance);
     } else {
       // s= is "TBD_INSTANCE_ID" or missing → compute from the name.
       instance = fnv64(tuningName, true);
@@ -98,6 +117,13 @@ export function collectTuningNames(xmlEntries) {
     }
     nameToInstance.set(tuningName, instance);
   }
+
+  // Loud failure if two PieMenuCategory-class tunings collide in the 31-bit
+  // space. assertNoCollisions throws with a clear message.
+  if (smallIds.size > 1) {
+    assertNoCollisions(smallIds);
+  }
+
   return nameToInstance;
 }
 

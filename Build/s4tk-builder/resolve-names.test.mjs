@@ -14,6 +14,10 @@ import {
   collectTuningNames,
   resolveNamesInXml,
 } from "./resolve-names.mjs";
+import {
+  PIE_MENU_CATEGORY_ID_MASK,
+  smallInstanceIdFor,
+} from "./pie-menu-category-id.mjs";
 
 let passed = 0;
 let failed = 0;
@@ -83,6 +87,41 @@ test("collectTuningNames: missing s= falls back to fnv64", () => {
   ];
   const map = collectTuningNames(xmls);
   assert.equal(map.get("HC_Bar"), fnv64("HC_Bar", true));
+});
+
+test("collectTuningNames: PieMenuCategory class uses 31-bit small ID (issue #14)", () => {
+  // Issue #14: EA's PieMenuCategory IDs are 16-32 bit. Hash-derived 64-bit IDs
+  // crash the TunableReference resolver when a SuperInteraction references
+  // them via <T n="category">. The collector must produce a small ID for
+  // PieMenuCategory-class tunings instead of the default fnv64(name, true).
+  const xmls = [
+    [
+      "HC_PieMenuCategory_Historian.xml",
+      `<I c="PieMenuCategory" i="pie_menu_category" m="interactions.pie_menu_category" n="HC_PieMenuCategory_Historian" s="TBD_INSTANCE_ID">
+       </I>`,
+    ],
+  ];
+  const map = collectTuningNames(xmls);
+  const id = map.get("HC_PieMenuCategory_Historian");
+  // Must match the helper's value (deterministic) and stay in 31 bits.
+  assert.equal(id, smallInstanceIdFor("HC_PieMenuCategory_Historian"));
+  assert.ok(id >= 1n && id <= PIE_MENU_CATEGORY_ID_MASK);
+  // And must NOT equal the default fnv64(name, true), which is 64-bit.
+  assert.notEqual(id, fnv64("HC_PieMenuCategory_Historian", true));
+});
+
+test("collectTuningNames: PieMenuCategory with explicit numeric s= still wins", () => {
+  // Source-of-truth precedence: if someone hand-fixed an instance ID for a
+  // category (e.g. to match an EA-shipped ID), the small-ID branch must NOT
+  // override it.
+  const xmls = [
+    [
+      "HC_PieMenuCategory_Historian.xml",
+      `<I c="PieMenuCategory" i="pie_menu_category" m="m" n="HC_PieMenuCategory_Historian" s="37041"></I>`,
+    ],
+  ];
+  const map = collectTuningNames(xmls);
+  assert.equal(map.get("HC_PieMenuCategory_Historian"), 37041n);
 });
 
 test("collectTuningNames: dropping XML files without <I> tags is silent", () => {

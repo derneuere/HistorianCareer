@@ -6,7 +6,7 @@
   "description": "Builds HistorianCareer_Tuning.package from the project's Tuning/ XML files and Docs/STRINGS.md.",
   "scripts": {
     "build": "node build-package.mjs",
-    "test": "node resolve-names.test.mjs"
+    "test": "node resolve-names.test.mjs && node pie-menu-category-id.test.mjs"
   },
   "dependencies": {
     "@s4tk/hashing": "^0.2.1",
