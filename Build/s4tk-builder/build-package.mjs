@@ -56,10 +56,11 @@ const SKIP_SIMDATA = process.argv.includes("--skip-simdata");
 // SimData resource type ID (BinaryResourceType.SimData = 0x545AC67A).
 const SIMDATA_TYPE = BinaryResourceType.SimData;
 
-// Tuning classes that *require* a SimData companion. We emit them anyway but warn loudly,
-// because without SimData the game will throw on load. Generate SimData for these in S4S.
+// Tuning classes that *require* a SimData companion. Note "TunableCareerTrack"
+// is EA's canonical class name (matches what `c="..."` says in the XML); the
+// simdata library registers a CareerTrack alias under that name.
 const NEEDS_SIMDATA = new Set([
-    "Career", "CareerTrack", "CareerLevel",
+    "Career", "CareerTrack", "TunableCareerTrack", "CareerLevel",
     "Aspiration", "AspirationTrack", "AspirationCareer",
     "Trait", "Objective", "CareerChanceCard",
 ]);
