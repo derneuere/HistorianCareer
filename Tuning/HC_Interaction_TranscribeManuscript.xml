@@ -4,9 +4,23 @@
   Minimal one-shot interaction. The only loot is our custom HC_Loot_Add_HistorianLevel_Small
   which ticks our internal statistic. EA's basic_experience_pay_* / buff_Confidence_High
   references were fabricated in the v0.1 scaffold and don't resolve.
+
+  interaction_category_tags â€” TunableSet of Tag enum values. Present on
+  1,124 of 1,124 EA SuperInteractions per issue #14's audit, so likely
+  required infrastructure even when no per-category gating is wired. We
+  declare the minimum-broad SI tags here. If/when the per-instance
+  pie-menu `category` field is wired (blocked on issue #15's 32-bit ID
+  resolver; see Docs/NOTE_pie_menu_category_ids.md), having
+  interaction_category_tags already in place is hypothesis #2 from the
+  issue: that EA's pie-menu generator needs broad tags declared before
+  the per-instance `category` field works.
 -->
 <I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_TranscribeManuscript" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_TRANSCRIBE_MANUSCRIPT</T>
+  <L n="interaction_category_tags">
+    <T>Interaction_Super</T>
+    <T>Interaction_All</T>
+  </L>
   <V n="basic_content" t="one_shot"/>
   <V n="outcome" t="single">
     <U n="single">

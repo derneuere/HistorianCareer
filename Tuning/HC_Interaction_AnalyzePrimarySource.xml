@@ -2,6 +2,12 @@
 <!-- L2 â€” Doktorand:in: "Analyze Primary Source". -->
 <I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_AnalyzePrimarySource" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_ANALYZE_PRIMARY_SOURCE</T>
+  <!-- See HC_Interaction_TranscribeManuscript.xml for the rationale on
+       interaction_category_tags (issue #14 hypothesis 2). -->
+  <L n="interaction_category_tags">
+    <T>Interaction_Super</T>
+    <T>Interaction_All</T>
+  </L>
   <V n="basic_content" t="one_shot"/>
   <V n="outcome" t="single">
     <U n="single">
