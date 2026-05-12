@@ -133,13 +133,35 @@ if (-not $PackageOnly) {
 
     if (Test-Path $ts4script) { Remove-Item -Force $ts4script }
     Write-Host "==> Writing $ts4script" -ForegroundColor Cyan
-    # PowerShell 5.1's Compress-Archive only accepts a .zip destination. Write to .zip
-    # then rename — the contents are identical, only the extension differs (Sims 4 looks
-    # for *.ts4script in the Mods folder).
-    $tmpZip = Join-Path $outDir "$pkgName.ts4script.zip"
-    if (Test-Path $tmpZip) { Remove-Item -Force $tmpZip }
-    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $tmpZip -CompressionLevel Optimal
-    Move-Item -Force $tmpZip $ts4script
+    # PowerShell's Compress-Archive bakes Windows-style backslash path separators
+    # into the zip's internal directory. Sims 4's Python zip-import looks for
+    # POSIX forward-slash entry names and silently fails to find anything when
+    # the zip uses backslashes — the .ts4script appears to load but no module is
+    # ever imported. Use .NET's ZipArchive directly so we control the entry name.
+    # PowerShell 5.1 needs BOTH assemblies: System.IO.Compression has the
+    # ZipArchive/ZipArchiveMode types; System.IO.Compression.FileSystem has ZipFile.Open.
+    Add-Type -AssemblyName System.IO.Compression | Out-Null
+    Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
+    $zipArchive = [System.IO.Compression.ZipFile]::Open(
+        $ts4script,
+        [System.IO.Compression.ZipArchiveMode]::Create
+    )
+    try {
+        $stageItem = Get-Item $stage
+        foreach ($f in Get-ChildItem $stage -Recurse -File) {
+            $rel = $f.FullName.Substring($stageItem.FullName.Length + 1).Replace('\', '/')
+            $entry = $zipArchive.CreateEntry($rel, [System.IO.Compression.CompressionLevel]::Optimal)
+            $writer = $entry.Open()
+            try {
+                $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+                $writer.Write($bytes, 0, $bytes.Length)
+            } finally {
+                $writer.Dispose()
+            }
+        }
+    } finally {
+        $zipArchive.Dispose()
+    }
 }
 
 # -----------------------------------------------------------------------------
