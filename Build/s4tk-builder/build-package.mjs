@@ -4,16 +4,24 @@
 // What this script does, end to end:
 //   1. Load strings.json. For each locale × key, hash the key with FNV-32 → STBL key.
 //   2. Walk Tuning/*.xml. Skip any file starting with "_" (those are retired).
-//   3. For each XML:
+//   3. PASS 1 — read every XML and build a global `tuning_name → instance ID` map
+//      (collectTuningNames in resolve-names.mjs). The map prefers s="<decimal>" when
+//      a tuning has one hardcoded, else uses fnv64(name, true). This is the bedrock
+//      for cross-resource references (issue #15).
+//   4. PASS 2 — for each XML:
 //        - parse the `n="<tuning_name>"` and `i="<i_attr>"` from the root <I> tag
 //        - resolve the resource type via TuningResourceType.parseAttr(i_attr)
-//        - compute the Instance ID = fnv64(tuning_name, highBit=true)
-//        - replace the `s="TBD_INSTANCE_ID"` placeholder with that hash
+//        - look up the Instance ID in the Pass 1 map (collision-checked)
+//        - replace the `s="TBD_INSTANCE_ID"` placeholder with the decimal ID
 //        - replace every `0xTBD_STBL_KEY_<KEY>` placeholder with the formatted STBL key
+//        - replace every named tuning reference (<T>NAME</T>, <E>NAME</E>,
+//          <T n="...">NAME</T>) whose body matches a known tuning name with the
+//          decimal instance ID (resolveNamesInXml). Names not in the map are left
+//          as-is; HC_-prefixed unknowns emit a warning.
 //        - add the XML to the Package
-//   4. Build one STBL resource per locale, give each the locale's high-byte instance,
+//   5. Build one STBL resource per locale, give each the locale's high-byte instance,
 //      add to the Package.
-//   5. Write the Package buffer to Build/out/HistorianCareer_Tuning.package.
+//   6. Write the Package buffer to Build/out/HistorianCareer_Tuning.package.
 //
 // Layer B caveat: any tuning class that requires a SimData companion (Career, CareerTrack,
 // CareerLevel, Aspiration, AspirationTrack, AspirationCareer, Trait, Objective, CareerChanceCard)
@@ -39,6 +47,10 @@ import {
     supportedClasses,
     KNOWN_SCHEMA_HASHES,
 } from "../simdata/dist/index.js";
+
+// Build-time tuning name → decimal instance ID resolver (issue #15). Two
+// pure passes, separated so the swap logic can be unit-tested without IO.
+import { collectTuningNames, resolveNamesInXml } from "./resolve-names.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
@@ -98,18 +110,36 @@ async function main() {
 
     // -----------------------------------------------------------------------
     // 2-3. Walk Tuning/*.xml, build XmlResource entries.
+    //
+    // Done in two passes (issue #15):
+    //   Pass 1 — read every XML and collect a global `tuning_name → instance ID`
+    //            map (preferring s="<number>" if present, else fnv64(name,true)).
+    //   Pass 2 — for each XML, substitute STBL placeholders AND replace named
+    //            tuning references (<T>NAME</T> / <E>NAME</E> / <T n="…">NAME</T>)
+    //            with their decimal instance IDs.
     // -----------------------------------------------------------------------
     const allTuningFiles = (await fs.readdir(TUNING_DIR))
         .filter(f => f.endsWith(".xml") && !f.startsWith("_"));
+
+    // Pass 1: read all XMLs and build the global name → instance map.
+    /** @type {Map<string, string>} */
+    const rawXmlByFile = new Map();
+    for (const file of allTuningFiles) {
+        const fullPath = path.join(TUNING_DIR, file);
+        rawXmlByFile.set(file, await fs.readFile(fullPath, "utf8"));
+    }
+    const nameToInstance = collectTuningNames(rawXmlByFile);
+    console.log(`[builder] resolved ${nameToInstance.size} tuning name(s) → instance IDs`);
 
     const entries = []; // { key: {type, group, instance}, value: Resource }
     const usedInstances = new Map(); // instance(bigint) -> tuningName  (collision check)
 
     let layerAcount = 0, layerBcount = 0, simdataWarnings = 0;
+    let nameResolverWarnings = 0;
 
+    // Pass 2: per-file substitution + add to package.
     for (const file of allTuningFiles) {
-        const fullPath = path.join(TUNING_DIR, file);
-        let xml = await fs.readFile(fullPath, "utf8");
+        let xml = rawXmlByFile.get(file);
 
         // Parse `<I c="..." i="..." n="..." s="...">` from the root tag.
         const rootMatch = xml.match(/<I\s+([^>]+)>/);
@@ -130,8 +160,11 @@ async function main() {
         // "aspiration", "objective", "action"...). Unknown attrs fall back to Tuning.
         const resourceType = TuningResourceType.parseAttr(iAttr);
 
-        // Instance ID = FNV-64 of the tuning name, with the high bit set (S4S convention).
-        const instance = fnv64(tuningName, true);
+        // Instance ID — take from the shared name→ID map populated in Pass 1.
+        // This stays consistent with how cross-references are resolved below,
+        // and the map already preferred a literal s="<decimal>" over fnv64
+        // when one was present on this tuning's root.
+        const instance = nameToInstance.get(tuningName) ?? fnv64(tuningName, true);
 
         // Collision check — should never happen unless two XMLs share `n=`.
         if (usedInstances.has(instance)) {
@@ -157,6 +190,20 @@ async function main() {
             // EA's literal style in tuning files.
             return "0x" + formatAsHexString(key, 8, false);
         });
+
+        // 3) Named tuning references → decimal instance IDs (issue #15).
+        //    Runs AFTER STBL substitution so the post-substitution form (e.g.
+        //    `<T n="display_name">0xfa1c2233</T>`) is correctly treated as a
+        //    numeric body and skipped. Runs ONCE per file with the global map
+        //    built in Pass 1.
+        {
+            const { xml: rewritten, warnings } = resolveNamesInXml(xml, nameToInstance, { file });
+            xml = rewritten;
+            for (const w of warnings) {
+                console.warn(`[warn] ${w}`);
+                nameResolverWarnings++;
+            }
+        }
 
         // Warn if any placeholder slipped through.
         const leftovers = xml.match(/TBD_(INSTANCE_ID|STBL_KEY_[A-Z0-9_]+)/g);
@@ -212,7 +259,10 @@ async function main() {
                             return k;
                         },
                         // Match the s4tk-builder's tuning name → instance ID convention.
-                        resolveTuningRef: (name) => fnv64(name, true),
+                        // Prefer the global map (which honors s="<decimal>" overrides
+                        // when present); fall back to fnv64 for refs to EA-shipped
+                        // tunings that aren't in our XMLs.
+                        resolveTuningRef: (name) => nameToInstance.get(name) ?? fnv64(name, true),
                         knownSchemaHashes: KNOWN_SCHEMA_HASHES,
                     });
                     const ir = buildSimDataForTuning(tree, ctx);
@@ -267,6 +317,9 @@ async function main() {
     console.log("");
     console.log(`[ok]   wrote ${entries.length} resources to ${path.relative(PROJECT_ROOT, OUT_PACKAGE)}`);
     console.log(`[ok]   Layer A resources: ${layerAcount} (no SimData required)`);
+    if (nameResolverWarnings > 0) {
+        console.log(`[warn] name resolver: ${nameResolverWarnings} HC_-looking refs were not in the tuning map — see warnings above.`);
+    }
     if (!INCLUDE_LAYER_B && layerBcount > 0) {
         console.log(`[info] Skipped ${layerBcount} Layer B resources (default drop-in build). Run with --include-layer-b for full Career/Aspiration support.`);
     } else if (INCLUDE_LAYER_B && layerBcount > 0) {
