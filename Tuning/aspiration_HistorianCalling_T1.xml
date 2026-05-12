@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Long aspiration tier 1: "Begin your career as a Historian (HiWi)." -->
+<!--
+  aspiration_valid_age_type must be set to a non-INVALID enum value (issue #13).
+  EA's runtime `Aspiration.is_valid_for_sim` (aspirations/aspiration_tuning.py)
+  indexes an age-list tuple keyed by this enum; the default `INVALID` (0) value
+  produces an IndexError ("tuple index out of range") when a Sim with this
+  aspiration is loaded. Historian is an adult-only career, so we pick
+  `YAE_ONLY` (Young Adult / Adult / Elder).
+-->
 <I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T1" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T1_NAME</T>
   <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T1_DESC</T>
+  <E n="aspiration_valid_age_type">YAE_ONLY</E>
   <L n="objectives">
     <T>objective_HC_RunTranscribeManuscript_x2</T>
   </L>
