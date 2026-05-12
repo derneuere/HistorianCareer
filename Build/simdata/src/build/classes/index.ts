@@ -43,7 +43,11 @@ function registerAll(): void {
   registerClass({ className: "AspirationTrack", schema: ASPIRATION_TRACK_SCHEMA });
   registerClass({ className: "CareerChanceCard", schema: CAREER_CHANCE_CARD_SCHEMA });
   registerClass({ className: "CareerLevel", schema: CAREER_LEVEL_SCHEMA });
+  // CAREER_TRACK_SCHEMA has className="TunableCareerTrack" (matches EA's
+  // binary). The registry key is the tuning XML's `c=` value — register both
+  // "CareerTrack" (HC convention) and "TunableCareerTrack" (EA convention).
   registerClass({ className: "CareerTrack", schema: CAREER_TRACK_SCHEMA });
+  registerClass({ className: "TunableCareerTrack", schema: CAREER_TRACK_SCHEMA });
   registerClass({ className: "Career", schema: CAREER_SCHEMA });
   registerClass({ className: "Buff", schema: BUFF_SCHEMA });
 }

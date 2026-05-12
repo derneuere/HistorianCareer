@@ -33,6 +33,7 @@ import { fnv32 } from "@s4tk/hashing/hashing.js";
 import type { TdescType, TdescColumn } from "../tdesc/types.js";
 import type { TuningNode, TuningLNode, TuningUNode, TuningVNode } from "../tuning/types.js";
 import type { BuildContext } from "./types.js";
+import { decodeEnumLiteral } from "./enums.js";
 
 // ---------------------------------------------------------------------------
 // Hashing helpers
@@ -250,16 +251,22 @@ export function buildCellFromType(
       return new Float4Cell(x ?? 0, y ?? 0, z ?? 0, w ?? 0);
     }
     case "enum": {
-      // EA stores enums as Int64. We need a value lookup table; for v0.1 we
-      // accept the textual enum name and map it to its index in `type.values`.
-      // The real EA encoding uses the integer value declared in the Python
-      // enum, which we don't have access to without the source — so we use
-      // the index as a best-effort. Per-class schemas can override with a
-      // custom builder when needed.
+      // EA stores enums as Int64. Decode the tuning literal (e.g. "LEVEL_1",
+      // "HIDDEN", "TeenPartTime") to its integer value via the enum registry
+      // in `./enums.ts`. The registry is keyed by enum class name (which the
+      // TDESC stores in `:@.type`, surfaced here as `type.enumName`).
+      // Falls back to 0n if the literal/enum is unknown — better than crashing.
       const v = textValue(node);
-      const idx = type.values.indexOf(v);
-      const value = BigInt(idx >= 0 ? idx : 0);
-      return new BigIntCell(DataType.Int64, value);
+      if (v === "") {
+        // Fall through to default — which for enums is typically just 0.
+        const def = defaultValue;
+        if (typeof def === "bigint") return new BigIntCell(DataType.Int64, def);
+        if (typeof def === "string" && def !== "") {
+          return new BigIntCell(DataType.Int64, decodeEnumLiteral(type.enumName, def));
+        }
+        return new BigIntCell(DataType.Int64, 0n);
+      }
+      return new BigIntCell(DataType.Int64, decodeEnumLiteral(type.enumName, v));
     }
     case "object": {
       const schema = ctx.schemaCache.get(type.schemaName)
@@ -340,7 +347,14 @@ function coerceBigInt(raw: string, def: unknown): bigint {
   if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) {
     return BigInt("0x" + trimmed.slice(2));
   }
-  return BigInt(trimmed);
+  // If it parses cleanly as a decimal integer, use that.
+  if (/^-?\d+$/.test(trimmed)) {
+    return BigInt(trimmed);
+  }
+  // Otherwise, it's likely an enum literal (e.g. <E>TEEN</E> inside a
+  // Vector<Int64>). Decode via the enum registry. Caller didn't tell us
+  // which enum class this is, so use a permissive global probe.
+  return decodeEnumLiteral(undefined, trimmed);
 }
 
 function coerceString(raw: string, def: unknown): string {
@@ -380,6 +394,22 @@ function resolveTuningRef(raw: string, ctx: BuildContext): bigint {
 }
 
 /**
+ * EA's SimData binary rewrites certain resource types when serializing
+ * ResourceKey cells. The rewriting maps the tuning-XML type to the actual
+ * loaded resource type. Empirically (from comparing EA SimData goldens
+ * against their tuning XML):
+ *
+ *   0x2F7D0004 (TGI icon reference)  →  0x00B2D882 (PNG image)
+ *
+ * Audio types (0x39B2AA4A), animation states (0x6B20C4F3), and other
+ * non-icon types are preserved as-is. This rule applies inside ResourceKey
+ * cells in SimData binaries — NOT in tuning XML.
+ */
+const RESOURCE_TYPE_REWRITES: Readonly<Record<number, number>> = Object.freeze({
+  0x2f7d0004: 0x00b2d882,
+});
+
+/**
  * Parse a resource key. EA's tuning XML stores them as strings; the SimData
  * XML stores them as "TYPE-GROUP-INSTANCE16" (hyphen-separated hex). Tuning
  * keys can be:
@@ -407,25 +437,31 @@ function parseResourceKey(
   }
 
   const cleaned = raw.trim();
+  let parsed: { type: number; group: number; instance: bigint } | null = null;
   if (cleaned.includes("-")) {
     const [t, g, i] = cleaned.split("-");
-    return {
+    parsed = {
       type: parseInt(t ?? "0", 16) >>> 0,
       group: parseInt(g ?? "0", 16) >>> 0,
       instance: BigInt("0x" + (i ?? "0")),
     };
-  }
-  if (cleaned.includes(":")) {
+  } else if (cleaned.includes(":")) {
     const [t, g, i] = cleaned.split(":");
-    return {
+    parsed = {
       type: parseInt(t ?? "0", 16) >>> 0,
       group: parseInt(g ?? "0", 16) >>> 0,
       instance: BigInt("0x" + (i ?? "0")),
     };
   }
-  // Unknown / plain name — return a zero key. The caller (per-class builder)
-  // may have a better strategy (e.g., resolve via the tuning name).
-  return { type: 0, group: 0, instance: 0n };
+  if (!parsed) {
+    // Unknown / plain name — return a zero key. The caller (per-class builder)
+    // may have a better strategy (e.g., resolve via the tuning name).
+    return { type: 0, group: 0, instance: 0n };
+  }
+  // Apply EA's type-rewriting rule (icon reference → PNG).
+  const rewritten = RESOURCE_TYPE_REWRITES[parsed.type];
+  if (rewritten !== undefined) parsed = { ...parsed, type: rewritten };
+  return parsed;
 }
 
 function parseFloatList(raw: string, n: number): number[] {

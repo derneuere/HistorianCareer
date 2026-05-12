@@ -1,12 +1,17 @@
 // Trait — hand-authored schema for the `Trait` tuning class.
 //
 // Source: `Trait.NOTES.md` in this directory documents what we learned and from
-// where. The schema hash `0xDE2EAF66` is the EA-canonical hash (extracted from
-// the binary in `reference/s4tk-models/test/data/simdatas/binary/trait.simdata`).
+// where. The schema hash `0x992BFA76` is the EA-canonical hash (current game
+// version 1.124.55, extracted from the real EA SimData golden at
+// `test/golden/Trait/Trait_Hidden_JoinedFiftyMileHighClub_Teen.simdata`).
+// The older s4tk-models fixture (`reference/s4tk-models/.../trait.simdata`)
+// uses a 17-column schema with hash 0xDE2EAF66; that fixture is from an
+// older game version with `bb_filter_styles`, `bb_filter_tags`, `species`,
+// and `ui_category` columns which have since been dropped.
 //
 // We override the generic build with a custom function that handles the
-// `trait_type` enum-to-Int64 mapping (PERSONALITY=0, GAMEPLAY=1, HIDDEN=2 per
-// EA observation) and provides correct defaults for the 17 columns even when
+// `trait_type` enum-to-Int64 mapping (PERSONALITY=0, GAMEPLAY=1, HIDDEN=4 per
+// EA observation) and provides correct defaults for the 13 columns even when
 // the tuning XML omits most of them.
 
 import { deepFreeze } from "../../tdesc/types.js";
@@ -14,6 +19,7 @@ import type { TdescSchema } from "../../tdesc/types.js";
 import type { TuningTree, TuningNode } from "../../tuning/types.js";
 import type { BuildContext, SimDataIR } from "../types.js";
 import { buildCell, hashSchemaName } from "../cells.js";
+import { decodeEnumLiteral } from "../enums.js";
 import { SimDataInstance, SimDataSchema, SimDataSchemaColumn } from "@s4tk/models/lib/resources/simdata/fragments.js";
 import {
   ObjectCell,
@@ -27,16 +33,14 @@ import {
 import { DataType } from "@s4tk/models/enums.js";
 
 /**
- * EA-canonical Trait schema hash. Extracted from the EA binary.
- * If you change column membership, this must change too.
+ * EA-canonical Trait schema hash. Extracted from the EA SimData golden
+ * (1.124.55). If you change column membership, this must change too.
  */
-const TRAIT_SCHEMA_HASH = 0xde2eaf66;
+const TRAIT_SCHEMA_HASH = 0x992bfa76;
 
-/** Schema in the order EA's binary uses. */
+/** Schema in the order EA's binary uses (13 cols, current game version). */
 const TRAIT_COLUMNS: readonly TdescColumnDef[] = Object.freeze([
   { name: "ages", type: "Vector" },
-  { name: "bb_filter_styles", type: "Vector" },
-  { name: "bb_filter_tags", type: "Vector" },
   { name: "cas_idle_asm_key", type: "ResourceKey" },
   { name: "cas_idle_asm_state", type: "String" },
   { name: "cas_selected_icon", type: "ResourceKey" },
@@ -45,12 +49,10 @@ const TRAIT_COLUMNS: readonly TdescColumnDef[] = Object.freeze([
   { name: "display_name", type: "LocalizationKey" },
   { name: "genders", type: "Vector" },
   { name: "icon", type: "ResourceKey" },
-  { name: "species", type: "Vector" },
   { name: "tags", type: "Vector" },
   { name: "trait_description", type: "LocalizationKey" },
   { name: "trait_origin_description", type: "LocalizationKey" },
   { name: "trait_type", type: "Int64" },
-  { name: "ui_category", type: "Variant" },
 ]);
 
 interface TdescColumnDef {
@@ -60,8 +62,7 @@ interface TdescColumnDef {
     | "ResourceKey"
     | "String"
     | "LocalizationKey"
-    | "Int64"
-    | "Variant";
+    | "Int64";
 }
 
 const COLUMN_TO_DATATYPE: Readonly<Record<TdescColumnDef["type"], DataType>> = Object.freeze({
@@ -70,14 +71,20 @@ const COLUMN_TO_DATATYPE: Readonly<Record<TdescColumnDef["type"], DataType>> = O
   String: DataType.String,
   LocalizationKey: DataType.LocalizationKey,
   Int64: DataType.Int64,
-  Variant: DataType.Variant,
 });
 
 const TRAIT_TYPE_MAP: Readonly<Record<string, bigint>> = Object.freeze({
+  // Current EA enum (verified empirically from EA Trait golden:
+  // HIDDEN → 4n).
   PERSONALITY: 0n,
   GAMEPLAY: 1n,
-  HIDDEN: 2n,
-  // EA also defines NPC=3, CAREER=4, BONUS=5 etc; if/when needed add here.
+  ASPIRATION: 2n,
+  ASPIRATION_REWARD: 3n,
+  HIDDEN: 4n,
+  BONUS: 5n,
+  NPC: 6n,
+  AWARD: 7n,
+  SOCIAL: 8n,
 });
 
 /** Build the Trait SimDataIR from a parsed tuning tree. */
@@ -97,14 +104,17 @@ export function buildTraitSimData(tree: TuningTree, ctx: BuildContext): SimDataI
   const slots = childrenBySlot(tree.children);
 
   // Cells in arbitrary order; ObjectCell rows are keyed by column name.
-  const row: Record<string, ObjectCell | NumberCell | BigIntCell | TextCell | ResourceKeyCell | VectorCell | VariantCell> = {};
+  const row: Record<string, ObjectCell | NumberCell | BigIntCell | TextCell | ResourceKeyCell | VectorCell> = {};
 
   // -- Strings & STBL keys
   row["display_name"] = locKeyCell(slots.get("display_name"), ctx);
   row["trait_description"] = locKeyCell(slots.get("trait_description"), ctx);
   row["trait_origin_description"] = locKeyCell(slots.get("trait_origin_description"), ctx);
+  // cas_idle_asm_state: EA writes "" when the tuning omits it.
   row["cas_idle_asm_state"] = stringCell(slots.get("cas_idle_asm_state"));
-  row["cas_trait_asm_param"] = stringCell(slots.get("cas_trait_asm_param"));
+  // cas_trait_asm_param: EA's default is "None" — the literal string, not empty.
+  // When the tuning omits the slot, EA writes the literal "None" from the TDESC.
+  row["cas_trait_asm_param"] = stringCell(slots.get("cas_trait_asm_param"), "None");
 
   // -- ResourceKeys (default 0/0/0n)
   row["icon"] = resourceKeyCell(slots.get("icon"));
@@ -116,23 +126,13 @@ export function buildTraitSimData(tree: TuningTree, ctx: BuildContext): SimDataI
   const traitType = TRAIT_TYPE_MAP[traitTypeText] ?? 0n;
   row["trait_type"] = new BigIntCell(DataType.Int64, traitType);
 
-  // -- Vectors of Int64
+  // -- Vectors of Int64 (with enum-literal decoding so e.g. <E>TEEN</E> → 8n)
   row["ages"] = int64VectorFromList(slots.get("ages"));
-  row["species"] = int64VectorFromList(slots.get("species"));
   row["tags"] = int64VectorFromList(slots.get("tags"));
   row["genders"] = int64VectorFromList(slots.get("genders"));
 
-  // -- Empty vectors (filter style/tag — typically empty in tuning)
-  row["bb_filter_styles"] = new VectorCell([]);
-  row["bb_filter_tags"] = new VectorCell([]);
-
   // -- Vector of trait references
   row["conflicting_traits"] = tableSetRefVector(slots.get("conflicting_traits"), ctx);
-
-  // -- ui_category: Variant with int64 child. EA tags the variant with
-  //    a per-class hash (0x603EAA6C for the default category). When the
-  //    tuning XML doesn't specify it, we emit a no-op variant.
-  row["ui_category"] = buildUiCategoryVariant(slots.get("ui_category"));
 
   const instance = SimDataInstance.fromObjectCell(
     tree.instanceName,
@@ -140,7 +140,7 @@ export function buildTraitSimData(tree: TuningTree, ctx: BuildContext): SimDataI
   );
 
   return Object.freeze({
-    version: 0x101,
+    version: 0x100,
     unused: 0,
     schemas: [schema],
     instances: [instance],
@@ -149,8 +149,8 @@ export function buildTraitSimData(tree: TuningTree, ctx: BuildContext): SimDataI
 
 // ---------------------------------------------------------------------------
 // TDESC-style schema export — built by parsing the real EA Trait.tdesc.json
-// fixture, then filtering to the 17-column EA-canonical allow-list that
-// matches the s4tk-models EA binary fixture (schema_hash=0xDE2EAF66).
+// fixture, then filtering to the 13-column EA-canonical allow-list that
+// matches the current game version (schema_hash=0x992BFA76).
 //
 // The custom `buildTraitSimData` above is what actually emits the SimData; this
 // export is for the registry/debugging path.
@@ -159,20 +159,21 @@ export function buildTraitSimData(tree: TuningTree, ctx: BuildContext): SimDataI
 import { loadTdescFixture, selectColumns, withAdditionalColumns } from "./loadSchema.js";
 import type { TdescColumn as _TdescColumn } from "../../tdesc/types.js";
 
-// The 4 columns the TDESC lacks `export_modes` on (TunableSet/TunableTags
+// The 2 columns the TDESC lacks `export_modes` on (TunableSet/TunableTags
 // without explicit export_modes) but are still persisted by EA per the binary
 // fixture. We add them here with the inferred types.
+//
+// Note: `species` and `bb_filter_tags` were on the older s4tk fixture; the
+// current EA Trait golden does NOT include them, so we don't add them.
 const TRAIT_EXTRA_COLUMNS: readonly _TdescColumn[] = Object.freeze([
   { name: "ages", type: { kind: "vector", elem: { kind: "int64" } }, persistedToSimData: true },
-  { name: "bb_filter_tags", type: { kind: "vector", elem: { kind: "int64" } }, persistedToSimData: true },
   { name: "genders", type: { kind: "vector", elem: { kind: "int64" } }, persistedToSimData: true },
-  { name: "species", type: { kind: "vector", elem: { kind: "int64" } }, persistedToSimData: true },
 ]);
 
 export const TRAIT_TDESC_SCHEMA: TdescSchema = (() => {
-  // First merge the TDESC-parsed schema with the four "extra" columns, then
-  // filter to the 17 EA-canonical columns. `selectColumns` validates that all
-  // 17 are present.
+  // First merge the TDESC-parsed schema with the two "extra" columns, then
+  // filter to the 13 EA-canonical columns. `selectColumns` validates that all
+  // 13 are present.
   const merged = withAdditionalColumns(loadTdescFixture("Trait.tdesc.json"), TRAIT_EXTRA_COLUMNS);
   return selectColumns(merged, TRAIT_COLUMNS.map((c) => c.name));
 })();
@@ -207,9 +208,18 @@ function locKeyCell(node: TuningNode | undefined, ctx: BuildContext): NumberCell
   return new NumberCell(DataType.LocalizationKey, parseInt(raw, 10) >>> 0);
 }
 
-function stringCell(node: TuningNode | undefined): TextCell {
-  return new TextCell(DataType.String, textOf(node));
+function stringCell(node: TuningNode | undefined, defaultValue: string = ""): TextCell {
+  const v = textOf(node);
+  return new TextCell(DataType.String, v !== "" ? v : defaultValue);
 }
+
+/**
+ * EA rewrites the icon resource type 0x2F7D0004 → 0x00B2D882 when writing
+ * SimData. See cells.ts for the rewrite table.
+ */
+const TRAIT_RESOURCE_TYPE_REWRITES: Readonly<Record<number, number>> = Object.freeze({
+  0x2f7d0004: 0x00b2d882,
+});
 
 function resourceKeyCell(node: TuningNode | undefined): ResourceKeyCell {
   const raw = textOf(node).trim();
@@ -218,8 +228,11 @@ function resourceKeyCell(node: TuningNode | undefined): ResourceKeyCell {
   const sep = raw.includes("-") ? "-" : raw.includes(":") ? ":" : null;
   if (sep) {
     const [t = "0", g = "0", i = "0"] = raw.split(sep);
+    let type = parseInt(t, 16) >>> 0;
+    const rewritten = TRAIT_RESOURCE_TYPE_REWRITES[type];
+    if (rewritten !== undefined) type = rewritten;
     return new ResourceKeyCell(
-      parseInt(t, 16) >>> 0,
+      type,
       parseInt(g, 16) >>> 0,
       BigInt("0x" + i),
     );
@@ -233,10 +246,15 @@ function int64VectorFromList(node: TuningNode | undefined): VectorCell {
   for (const item of node.children) {
     const v = textOf(item);
     if (!v) continue;
-    const val =
-      v.startsWith("0x") || v.startsWith("0X")
-        ? BigInt("0x" + v.slice(2))
-        : BigInt(parseInt(v, 10));
+    let val: bigint;
+    if (v.startsWith("0x") || v.startsWith("0X")) {
+      val = BigInt("0x" + v.slice(2));
+    } else if (/^-?\d+$/.test(v)) {
+      val = BigInt(v);
+    } else {
+      // Enum literal like <E>TEEN</E> — look up in the enum registry.
+      val = decodeEnumLiteral(undefined, v);
+    }
     children.push(new BigIntCell(DataType.Int64, val));
   }
   return new VectorCell(children);
@@ -257,29 +275,9 @@ function tableSetRefVector(node: TuningNode | undefined, ctx: BuildContext): Vec
   return new VectorCell(children);
 }
 
-/** The EA variant tag for the default ui_category. */
-const UI_CATEGORY_DEFAULT_TAG = 0x603eaa6c;
-
-function buildUiCategoryVariant(node: TuningNode | undefined): VariantCell {
-  // Default: variant with tag 0x603EAA6C wrapping an Int64(0).
-  if (!node) {
-    return new VariantCell(UI_CATEGORY_DEFAULT_TAG, new BigIntCell(DataType.Int64, 0n));
-  }
-  // Variant tunings look like <V n="ui_category" t="…"><T type="Int64">N</T></V>.
-  // For trait we accept the variant tag from the tuning if present; otherwise
-  // default.
-  if (node.kind !== "V") {
-    return new VariantCell(UI_CATEGORY_DEFAULT_TAG, new BigIntCell(DataType.Int64, 0n));
-  }
-  const inner = node.child;
-  const v = inner ? textOf(inner) : "0";
-  const value = v.startsWith("0x") ? BigInt("0x" + v.slice(2)) : BigInt(parseInt(v, 10));
-  // Variant tag: use the EA-default if the tuning hasn't specified an override.
-  const tag = node.variantTag
-    ? hashSchemaName(node.variantTag) >>> 0
-    : UI_CATEGORY_DEFAULT_TAG;
-  return new VariantCell(tag, new BigIntCell(DataType.Int64, value));
-}
-
-// Silence unused-import lint: buildCell may be needed if we extend the schema later.
+// Silence unused-import lint: buildCell, hashSchemaName may be needed if we
+// extend the schema later. VariantCell is no longer used now that ui_category
+// has been removed from the current-game schema.
 void buildCell;
+void hashSchemaName;
+void VariantCell;

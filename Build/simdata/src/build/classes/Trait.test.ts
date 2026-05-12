@@ -13,13 +13,15 @@ const TRAIT_TUNING_PATH = path.resolve(
   __dirname,
   "../../../../../Tuning/trait_HabilitationRenown.xml",
 );
-const EA_TRAIT_BINARY = path.resolve(
+// EA golden Trait simdata, extracted from the live 1.124.55 game build
+// (this is what `parseTuning` should reproduce byte-equal).
+const EA_TRAIT_GOLDEN = path.resolve(
   __dirname,
-  "../../../../../../reference/s4tk-models/test/data/simdatas/binary/trait.simdata",
+  "../../../test/golden/Trait/Trait_Hidden_JoinedFiftyMileHighClub_Teen.simdata",
 );
 
 describe("Trait class builder", () => {
-  it("emits a SimData with all 17 EA-canonical columns", async () => {
+  it("emits a SimData with the 13 EA-canonical columns (current game version)", async () => {
     const xml = await fs.readFile(TRAIT_TUNING_PATH, "utf8");
     const tree = parseTuning(xml);
     const ctx = createBuildContext({
@@ -30,12 +32,12 @@ describe("Trait class builder", () => {
     expect(ir.schemas).toHaveLength(1);
     const schema = ir.schemas[0]!;
     expect(schema.name).toBe("Trait");
-    expect(schema.hash >>> 0).toBe(0xde2eaf66);
+    // Current game schema hash (1.124.55). The older 17-column s4tk fixture
+    // had hash 0xde2eaf66.
+    expect(schema.hash >>> 0).toBe(0x992bfa76);
     expect(schema.columns.map((c) => c.name)).toEqual(
       [
         "ages",
-        "bb_filter_styles",
-        "bb_filter_tags",
         "cas_idle_asm_key",
         "cas_idle_asm_state",
         "cas_selected_icon",
@@ -44,12 +46,10 @@ describe("Trait class builder", () => {
         "display_name",
         "genders",
         "icon",
-        "species",
         "tags",
         "trait_description",
         "trait_origin_description",
         "trait_type",
-        "ui_category",
       ],
     );
 
@@ -59,7 +59,7 @@ describe("Trait class builder", () => {
     // Round-trip through @s4tk/models — the structural test.
     const round = parseSimDataBuffer(buf);
     expect(round.schemas[0]!.name).toBe("Trait");
-    expect((round.schemas[0]!.hash >>> 0)).toBe(0xde2eaf66);
+    expect((round.schemas[0]!.hash >>> 0)).toBe(0x992bfa76);
     expect(round.instances).toHaveLength(1);
     expect(round.instances[0]!.name).toBe("trait_HabilitationRenown");
 
@@ -73,27 +73,22 @@ describe("Trait class builder", () => {
     expect((row.icon as { type: number; group: number; instance: bigint }).type).toBe(0);
   });
 
-  it("the EA Trait binary parses and confirms our schema (acceptance: structural match)", async () => {
-    // This is an honest acceptance test — read the EA binary, list its columns
-    // and types, and verify our hand-authored schema matches name-for-name.
-    const buf = await fs.readFile(EA_TRAIT_BINARY);
+  it("matches the EA Trait golden's schema name and hash (acceptance: structural match)", async () => {
+    // Read the EA golden — the binary the live game produces for the
+    // Trait_Hidden_JoinedFiftyMileHighClub_Teen trait. Our schema name and
+    // column set must match.
+    const buf = await fs.readFile(EA_TRAIT_GOLDEN);
     const ea = parseSimDataBuffer(buf);
     expect(ea.schemas).toHaveLength(1);
     const eaSchema = ea.schemas[0]!;
     expect(eaSchema.name).toBe("Trait");
-    expect(eaSchema.hash >>> 0).toBe(0xde2eaf66);
+    expect(eaSchema.hash >>> 0).toBe(0x992bfa76);
 
-    // Build a Set of our column → DataType.
-    const ours = new Map<string, number>();
-    for (const c of TRAIT_TDESC_SCHEMA.rootColumns) {
-      // Translate our kind → DataType number by name.
-      // We mirror by name; the DataType for each is fixed by Trait.ts.
-      ours.set(c.name, -1);
-    }
-
+    // Confirm our TDESC-driven schema has the same column names.
+    const ours = new Set(TRAIT_TDESC_SCHEMA.rootColumns.map((c) => c.name));
     for (const eaCol of eaSchema.columns) {
       expect(ours.has(eaCol.name)).toBe(true);
-      // We pin the DataType in Trait.ts itself; we re-verify via the IR test above.
     }
+    expect(eaSchema.columns.length).toBe(ours.size);
   });
 });

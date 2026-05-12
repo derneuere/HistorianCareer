@@ -64,13 +64,15 @@ describe("parseTdescJson — parses all 9 EA TDESC fixtures", () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it("Buff has the 10 EA-canonical persisted columns (subset check)", () => {
+  it("Buff TDESC persists columns matching the full export_modes rule", () => {
     const json = readFileSync(join(TDESC_DIR, "Buff.tdesc.json"), "utf8");
     const schema = parseTdescJson(json);
     const persistedNames = new Set(
       schema.rootColumns.filter((c) => c.persistedToSimData).map((c) => c.name),
     );
-    const required = [
+    // The v0.3 persistence rule requires the full export_modes triple
+    // (client_binary, server_binary, server_xml). These columns have it:
+    const expectedFullTriple = [
       "audio_sting_on_add",
       "audio_sting_on_remove",
       "buff_description",
@@ -78,31 +80,34 @@ describe("parseTdescJson — parses all 9 EA TDESC fixtures", () => {
       "icon",
       "mood_type",
       "mood_weight",
-      "timeout_string",
-      "timeout_string_no_next_buff",
+      "plumbob_vfx",
       "ui_sort_order",
     ];
-    for (const name of required) {
+    for (const name of expectedFullTriple) {
       expect(persistedNames.has(name)).toBe(true);
     }
+    // These have ONLY `client_binary` — excluded by the v0.3 rule:
+    expect(persistedNames.has("timeout_string")).toBe(false);
+    expect(persistedNames.has("timeout_string_no_next_buff")).toBe(false);
+    // `cas_vfx` is "client_binary,server_binary,server_xml" → included; we
+    // don't assert here because it's a new addition that may shift across
+    // game versions.
   });
 
-  it("Trait persists the expected EA-canonical columns (subset check)", () => {
+  it("Trait TDESC persists columns matching the full export_modes rule", () => {
     const json = readFileSync(join(TDESC_DIR, "Trait.tdesc.json"), "utf8");
     const schema = parseTdescJson(json);
     const persistedNames = new Set(
       schema.rootColumns.filter((c) => c.persistedToSimData).map((c) => c.name),
     );
-    // The "client_binary" rule captures 13 of the 17 EA columns. The other
-    // four (`ages`, `bb_filter_tags`, `genders`, `species`) are TunableSet/
-    // TunableTags without explicit export_modes; per the persistence rule
-    // they are NOT in the parsed-persisted set. Per-class allow-lists in
-    // schemas.ts add them back.
+    // The v0.3 rule (full export_modes triple) captures these columns. The
+    // EA golden also has `ages` and `genders` which are TunableSet without
+    // explicit export_modes — those are added back via per-class allow-list.
     const expectedInTdesc = [
-      "bb_filter_styles", "cas_idle_asm_key", "cas_idle_asm_state",
-      "cas_selected_icon", "cas_trait_asm_param", "conflicting_traits",
+      "cas_idle_asm_key", "cas_idle_asm_state",
+      "cas_trait_asm_param", "conflicting_traits",
       "display_name", "icon", "tags", "trait_description",
-      "trait_origin_description", "trait_type", "ui_category",
+      "trait_origin_description", "trait_type",
     ];
     for (const name of expectedInTdesc) {
       expect(persistedNames.has(name)).toBe(true);
@@ -154,6 +159,52 @@ describe("parseTdescJson — parses all 9 EA TDESC fixtures", () => {
       .map((c) => c.name)
       .sort();
     expect(persistedNames).toEqual(["objectives"]);
+  });
+});
+
+describe("parseTdescJson — v0.3 persistence rule (full export_modes triple)", () => {
+  // Synthesize a minimal TDESC inline so the test doesn't depend on the
+  // fixture having any particular column. We parse the JSON directly.
+  function persistedFor(exportModes: string | undefined): boolean {
+    const doc = {
+      TuningRoot: [
+        {
+          ":@": { class: "X", module: "x.y" },
+          Instance: [
+            {
+              ":@": {
+                name: "test_col",
+                class: "Tunable",
+                type: "int",
+                ...(exportModes !== undefined ? { export_modes: exportModes } : {}),
+              },
+              Tunable: [],
+            },
+          ],
+        },
+      ],
+    };
+    const schema = parseTdescJson(JSON.stringify(doc));
+    return schema.rootColumns[0]!.persistedToSimData;
+  }
+
+  it("persists when export_modes is the full triple (any order)", () => {
+    expect(persistedFor("client_binary,server_binary,server_xml")).toBe(true);
+    expect(persistedFor("server_xml,server_binary,client_binary")).toBe(true);
+  });
+
+  it("excludes when only `client_binary` is set", () => {
+    expect(persistedFor("client_binary")).toBe(false);
+  });
+
+  it("excludes when export_modes is missing entirely", () => {
+    expect(persistedFor(undefined)).toBe(false);
+  });
+
+  it("excludes any single/pair subset", () => {
+    expect(persistedFor("client_binary,server_binary")).toBe(false);
+    expect(persistedFor("server_binary,server_xml")).toBe(false);
+    expect(persistedFor("server_xml")).toBe(false);
   });
 });
 
