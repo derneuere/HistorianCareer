@@ -34,38 +34,42 @@ async function buildOne(filename: string): Promise<ReturnType<typeof parseSimDat
 }
 
 describe("TDESC-driven schemas — expected column sets per class", () => {
-  it("Objective: 5 EA columns (display_age_list, display_text, satisfaction_points, show_progress, tooltip)", async () => {
+  // v0.3: column sets are now anchored to real EA SimData goldens
+  // (test/golden/) instead of the older s4tk-models fixture and TDESC raw
+  // dump. The per-class schemas in src/build/classes/schemas.ts intersect the
+  // TDESC's persisted-column set with what the real EA goldens contain.
+  it("Objective: 3 EA-golden columns (display_text, satisfaction_points, tooltip)", async () => {
     const sd = await buildOne("objective_HC_ReadNonfictionBook.xml");
-    // The Objective root schema, plus a nested schema for `display_age_list`
-    // (an OptionalTunable wrapping a tuple), totals 2. We pick the Objective.
     const obj = sd.schemas.find((s) => s.name === "Objective");
     expect(obj).toBeDefined();
     const cols = obj!.columns.map((c) => c.name).sort();
     expect(cols).toEqual([
-      "display_age_list",
       "display_text",
       "satisfaction_points",
-      "show_progress",
       "tooltip",
     ]);
   });
 
-  it("Aspiration: 4 EA columns (aspiration_valid_age_type, descriptive_text, display_name, objectives)", async () => {
+  it("Aspiration: 5 EA-golden columns (descriptive_text, disabled, display_name, is_child_aspiration, objectives)", async () => {
     const sd = await buildOne("aspiration_HistorianCalling_T1.xml");
     expect(sd.schemas[0]!.columns.map((c) => c.name).sort()).toEqual([
-      "aspiration_valid_age_type",
       "descriptive_text",
+      "disabled",
       "display_name",
+      "is_child_aspiration",
       "objectives",
     ]);
   });
 
-  it("AspirationCareer: 1 EA column (objectives only)", async () => {
+  it("AspirationCareer: 2 EA-golden columns (disabled, objectives)", async () => {
     const sd = await buildOne("aspiration_career_Historian_L1.xml");
-    expect(sd.schemas[0]!.columns.map((c) => c.name).sort()).toEqual(["objectives"]);
+    expect(sd.schemas[0]!.columns.map((c) => c.name).sort()).toEqual([
+      "disabled",
+      "objectives",
+    ]);
   });
 
-  it("AspirationTrack: 11 EA columns (no provided_traits)", async () => {
+  it("AspirationTrack: 9 EA-golden columns", async () => {
     const sd = await buildOne("aspiration_track_HistorianCalling.xml");
     const cols = sd.schemas[0]!.columns.map((c) => c.name).sort();
     expect(cols).toEqual([
@@ -75,51 +79,40 @@ describe("TDESC-driven schemas — expected column sets per class", () => {
       "display_text",
       "icon",
       "icon_high_res",
-      "is_hidden_unlockable",
       "mood_asm_param",
-      "override_traits",
       "primary_trait",
       "reward",
     ]);
   });
 
-  it("Career: 11 EA columns", async () => {
+  it("Career: 2 EA-golden columns (career_category, start_track)", async () => {
     const sd = await buildOne("career_Adult_Historian.xml");
     const cols = sd.schemas[0]!.columns.map((c) => c.name).sort();
     expect(cols).toEqual([
-      "build_buy_info",
-      "call_costar_interaction",
-      "cancel_audition_interaction",
-      "cancel_gig_interaction",
       "career_category",
-      "career_panel_type",
-      "find_audition_interaction",
-      "hire_agent_interaction",
-      "reputation_stat",
-      "show_ideal_mood",
       "start_track",
     ]);
   });
 
-  it("CareerLevel: 9 EA columns (excluding end_of_day_loot and super_affordances which lack export_modes)", async () => {
+  it("CareerLevel: 7 EA-golden columns", async () => {
     const sd = await buildOne("career_level_Adult_Historian_L1.xml");
     const cols = sd.schemas[0]!.columns.map((c) => c.name).sort();
     expect(cols).toEqual([
-      "agents_available",
       "aspiration",
       "ideal_mood",
-      "pay_type",
       "performance_stat",
-      "pto_per_day",
+      "simoleons_per_hour",
       "title",
       "title_description",
       "work_schedule",
     ]);
   });
 
-  it("CareerTrack: 10 EA columns (renamed from class TunableCareerTrack)", async () => {
+  it("CareerTrack: 8 EA-golden columns (schema name 'TunableCareerTrack')", async () => {
     const sd = await buildOne("career_track_Adult_Historian.xml");
-    expect(sd.schemas[0]!.name).toBe("CareerTrack");
+    // EA's SimData binary uses the TDESC's `class` attribute as the schema
+    // name — "TunableCareerTrack", not the tuning XML's `c="CareerTrack"`.
+    expect(sd.schemas[0]!.name).toBe("TunableCareerTrack");
     const cols = sd.schemas[0]!.columns.map((c) => c.name).sort();
     expect(cols).toEqual([
       "branches",
@@ -127,22 +120,19 @@ describe("TDESC-driven schemas — expected column sets per class", () => {
       "career_description",
       "career_levels",
       "career_name",
-      "career_name_gender_neutral",
       "icon",
       "icon_high_res",
       "image",
-      "show_now_hiring_string",
     ]);
   });
 
-  it("Trait: 17 EA-canonical columns matching the s4tk binary fixture", async () => {
+  it("Trait: 13 EA-canonical columns (current game version)", async () => {
     const sd = await buildOne("trait_HabilitationRenown.xml");
-    expect(sd.schemas[0]!.hash >>> 0).toBe(0xde2eaf66);
+    // EA schema hash for current Trait (1.124.55)
+    expect(sd.schemas[0]!.hash >>> 0).toBe(0x992bfa76);
     const cols = sd.schemas[0]!.columns.map((c) => c.name);
     expect(cols).toEqual([
       "ages",
-      "bb_filter_styles",
-      "bb_filter_tags",
       "cas_idle_asm_key",
       "cas_idle_asm_state",
       "cas_selected_icon",
@@ -151,12 +141,10 @@ describe("TDESC-driven schemas — expected column sets per class", () => {
       "display_name",
       "genders",
       "icon",
-      "species",
       "tags",
       "trait_description",
       "trait_origin_description",
       "trait_type",
-      "ui_category",
     ]);
   });
 

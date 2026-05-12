@@ -104,7 +104,7 @@ export function buildSimData(
   const schemas = Array.from(ctx.schemaCache.values());
 
   return Object.freeze({
-    version: 0x101,
+    version: 0x100,
     unused: 0,
     schemas,
     instances: [instance],

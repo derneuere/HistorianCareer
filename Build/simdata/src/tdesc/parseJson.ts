@@ -16,11 +16,23 @@
 //     }]
 //   }
 //
-// Persistence rule (v0.2): a top-level tunable is persisted iff its
-// `:@.export_modes` attribute contains the substring `client_binary`. We do
-// NOT auto-persist `TunableSet`/`TunableTags` — that heuristic over-generated
-// dozens of irrelevant columns. Per-class allow-lists (in
-// `src/build/classes/schemas.ts`) provide an additional filter where needed.
+// Persistence rule (v0.3): a top-level tunable is persisted iff its
+// `:@.export_modes` attribute is the *complete* triple
+// `client_binary,server_binary,server_xml`. EA's exporter (per empirical
+// comparison against 9 real EA SimData goldens) uses the presence of all three
+// export modes — not just `client_binary` — to gate inclusion in SimData. The
+// 14 tunables in our current TDESCs that have ONLY `client_binary`
+// (build_buy_info, call_costar_interaction, …) are NOT persisted in EA's
+// binaries; they're only `client_binary` because EA marked them for some
+// future broadening that never landed in SimData. We use exact-match instead
+// of substring to exclude them. See docs/tdesc-format.md for the empirical
+// derivation.
+//
+// Per-class allow-lists (in `src/build/classes/schemas.ts`) provide an
+// additional filter to handle (a) columns EA persists in older goldens that
+// are missing from the current TDESC (e.g. Aspiration.disabled —
+// AspirationBasic parent class field), and (b) columns the current TDESC
+// added that aren't in our goldens (e.g. plumbob_vfx, cas_vfx on Buff).
 
 import {
   deepFreeze,
@@ -99,14 +111,27 @@ function parseTopLevelInstance(inst: unknown): TdescColumn | null {
 
 /**
  * Persistence rule. A top-level tunable is persisted iff its `export_modes`
- * attribute contains `client_binary`. (See docs/tdesc-format.md for the
- * empirical justification.)
+ * attribute is the COMPLETE triple `client_binary,server_binary,server_xml`.
+ * (See docs/tdesc-format.md for the empirical justification — short version:
+ * EA's TDESCs mark some new columns as `client_binary` only, and those are
+ * not actually persisted to the SimData binary.)
  */
+const FULL_EXPORT_MODES = "client_binary,server_binary,server_xml";
+
 function isPersisted(attrs: ReadonlyAttrs): boolean {
   const modes = readString(attrs, "export_modes");
-  if (modes && modes.includes("client_binary")) return true;
-  return false;
+  if (!modes) return false;
+  // Parse as a comma-separated set so order doesn't matter.
+  const parts = new Set(modes.split(",").map((s) => s.trim()));
+  return (
+    parts.has("client_binary") &&
+    parts.has("server_binary") &&
+    parts.has("server_xml")
+  );
 }
+
+// Re-export the constant for tests and tooling that want to spot-check.
+export { FULL_EXPORT_MODES };
 
 // ---------------------------------------------------------------------------
 // Type construction
@@ -161,14 +186,21 @@ function parseTunableType(node: unknown, attrs: ReadonlyAttrs): TdescType {
 
     case "TunableMapping": {
       // A dict mapping key→value. EA's SimData layer treats these as a vector
-      // of tuples; we approximate with vector<object>.
+      // of tuples; we approximate with vector<object>. Empirically, EA names
+      // the mapping element schema using the slot name (e.g. "aspirations" —
+      // the same name as the parent column), NOT the TDESC's
+      // `mapping_class` attribute. We default to the slot name.
       const keyType = parseMappingChild(node, attrs, "mapping_key");
       const valueType = parseMappingChild(node, attrs, "mapping_value");
+      const schemaName =
+        readString(attrs, "name") ??
+        readString(attrs, "mapping_class") ??
+        "Mapping";
       return {
         kind: "vector",
         elem: {
           kind: "object",
-          schemaName: `${readString(attrs, "name") ?? "Mapping"}_Entry`,
+          schemaName,
           columns: [
             { name: "key", type: keyType, persistedToSimData: true },
             { name: "value", type: valueType, persistedToSimData: true },
@@ -263,11 +295,16 @@ function parseList(node: unknown, attrs: ReadonlyAttrs): TdescType {
 
 /** Parse TunableTuple: many sub-tunables. */
 function parseTuple(node: unknown, attrs: ReadonlyAttrs): TdescType {
-  const schemaName =
-    readString(attrs, "class") ??
-    readString(attrs, "name") ??
-    "Tuple";
   const cls = readString(attrs, "class") ?? "TunableTuple";
+  // Schema-name selection: prefer the EA-named class (e.g.
+  // "TunableSubsetCompletionType") if it differs from the generic
+  // "TunableTuple"; fall back to the slot `name` (e.g. "start_time"); fall
+  // back to a generated name made from the field set.
+  //
+  // The naming matters because the build layer interns SimDataSchemas by
+  // name — two distinct tuple types with the same name (e.g. two nested
+  // anonymous TunableTuples) would clobber each other and cause row/column
+  // mismatches at serialization time (see issue #10 CareerLevel crash).
   const columns: TdescColumn[] = [];
   for (const child of iterChildren(node, cls)) {
     if (!isObject(child)) continue;
@@ -287,7 +324,32 @@ function parseTuple(node: unknown, attrs: ReadonlyAttrs): TdescType {
       persistedToSimData: true,
     });
   }
+  const schemaName = pickTupleSchemaName(attrs, cls, columns);
   return { kind: "object", schemaName, columns };
+}
+
+/**
+ * Pick a unique-enough schema name for a TunableTuple. If `class` is the
+ * generic "TunableTuple", we fall back to `name` and then to a name derived
+ * from the column set so distinct anonymous tuples don't collide in the
+ * SimData schema cache.
+ */
+function pickTupleSchemaName(
+  attrs: ReadonlyAttrs,
+  cls: string,
+  columns: readonly TdescColumn[],
+): string {
+  // EA's named tuple classes (e.g. "TunableSubsetCompletionType",
+  // "TunableScreenSlamKeyBased") get their class name. We only resort to slot
+  // name + column-derived suffix for the generic "TunableTuple".
+  if (cls && cls !== "TunableTuple") return cls;
+  const slotName = readString(attrs, "name");
+  if (slotName) return slotName;
+  // Anonymous tuple — synthesize a name from the column set. This is stable
+  // for the same set of columns (so duplicate tuples share a schema) but
+  // distinguishes structurally-different tuples.
+  if (columns.length === 0) return "AnonTuple";
+  return "AnonTuple_" + columns.map((c) => c.name).join("_");
 }
 
 /** Parse TunableVariant: discriminated union of cases. */
@@ -349,6 +411,10 @@ function parseOptional(node: unknown): TdescType {
 /**
  * Read a TunableMapping's key or value column. Looks for the named child
  * under the node body and parses it as a tunable type.
+ *
+ * TunableMapping's body is `TunableList → [ TunableTuple → [key, value] ]`
+ * (the mapping is conceptually a list of (key,value) tuples). We recurse
+ * through that nested structure to find the named child.
  */
 function parseMappingChild(node: unknown, attrs: ReadonlyAttrs, attrName: "mapping_key" | "mapping_value"): TdescType {
   // `:@.mapping_key` and `:@.mapping_value` name the inner field; the field
@@ -356,13 +422,33 @@ function parseMappingChild(node: unknown, attrs: ReadonlyAttrs, attrName: "mappi
   // have these in the TDESC, so default to int64 (most common for tag keys).
   const childName = readString(attrs, attrName);
   if (!childName) return { kind: "int64" };
-  for (const child of iterChildren(node, "TunableMapping")) {
-    if (!isObject(child)) continue;
-    const childAttrs = readAttrs(child);
-    if (readString(childAttrs, "name") !== childName) continue;
-    return parseTunableType(child, childAttrs);
+  const found = findNamedTunable(node, childName);
+  return found ?? { kind: "int64" };
+}
+
+/**
+ * Recursively search the body of a TDESC node for a child whose `:@.name`
+ * matches the requested name. Returns the parsed type, or undefined if not
+ * found. Used by parseMappingChild to dig through the TunableList → TunableTuple
+ * nesting that TunableMapping bodies use.
+ */
+function findNamedTunable(node: unknown, name: string): TdescType | undefined {
+  if (!isObject(node)) return undefined;
+  for (const [key, val] of Object.entries(node)) {
+    if (key === ":@") continue;
+    if (!Array.isArray(val)) continue;
+    for (const child of val) {
+      if (!isObject(child)) continue;
+      const childAttrs = readAttrs(child);
+      if (readString(childAttrs, "name") === name) {
+        return parseTunableType(child, childAttrs);
+      }
+      // Recurse into the body of this child.
+      const inner = findNamedTunable(child, name);
+      if (inner) return inner;
+    }
   }
-  return { kind: "int64" };
+  return undefined;
 }
 
 /**
@@ -373,6 +459,8 @@ function parseMappingChild(node: unknown, attrs: ReadonlyAttrs, attrName: "mappi
  */
 function parseUnknownWrapper(node: unknown): TdescType {
   if (!isObject(node)) return { kind: "string" };
+  const attrs = readAttrs(node);
+  const cls = readString(attrs, "class") ?? "Wrapper";
   // Find the first array property (other than :@) and recurse into its
   // children, treating them as tuple-like fields.
   for (const [key, val] of Object.entries(node)) {
@@ -394,7 +482,11 @@ function parseUnknownWrapper(node: unknown): TdescType {
       });
     }
     if (columns.length > 0) {
-      return { kind: "object", schemaName: `Wrapper_${key}`, columns };
+      // Use the wrapper's class name for the schema (e.g.
+      // "TunableWeeklySchedule") so distinct wrappers don't collide in the
+      // schema cache. Fall back to the body-key tag if no class is provided.
+      const schemaName = cls !== "Wrapper" ? cls : `Wrapper_${key}`;
+      return { kind: "object", schemaName, columns };
     }
     return { kind: "string" };
   }
@@ -428,6 +520,12 @@ function parseDefault(attrs: ReadonlyAttrs, type: TdescType): unknown {
       return Number.parseFloat(raw);
     case "string":
     case "hashed-string":
+      // EA's TDESCs commonly mark `default="None"` for string Tunables, but
+      // the actual EA SimData binary writes empty bytes when the tuning omits
+      // the slot (verified against AspirationTrack.mood_asm_param,
+      // Buff.timeout_string, …). So treat "None" as no default.
+      if (raw === "None") return undefined;
+      return raw;
     case "enum":
     case "resource-key":
       return raw;
