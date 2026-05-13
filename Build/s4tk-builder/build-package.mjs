@@ -92,6 +92,35 @@ const SKIP_SIMDATA = process.argv.includes("--skip-simdata");
 // SimData resource type ID (BinaryResourceType.SimData = 0x545AC67A).
 const SIMDATA_TYPE = BinaryResourceType.SimData;
 
+/**
+ * EA's SimData companion resources are stored at a CLASS-SPECIFIC group ID
+ * derived deterministically from the tuning's resource type, NOT at group 0.
+ *
+ * The Olympus Flash UI looks up SimData by (type, group, instance) — a mod
+ * shipping SimData at group=0 is invisible to the UI even though the package
+ * loads cleanly. Symptoms include the silent pie-menu failure on right-click
+ * ("Failed to locate category info"), the career display showing "@" / no
+ * icon, and custom AspirationTracks not appearing in CAS.
+ *
+ * The encoding is: group = (tuningType & 0x00FFFFFF) XOR (tuningType >>> 24).
+ * Empirically verified against EA goldens (extracted from
+ * SimulationFullBuild0.package):
+ *
+ *   Class             Tuning type   EA SimData group   Formula result
+ *   PieMenuCategory   0x03E9D964    0x00E9D967         (0xE9D964 ^ 0x03) = 0xE9D967 ✓
+ *   Career            0x73996BEB    0x00996B98         (0x996BEB ^ 0x73) = 0x996B98 ✓
+ *   CareerTrack       0x48C75CE3    0x00C75CAB         (0xC75CE3 ^ 0x48) = 0xC75CAB ✓
+ *   CareerLevel       0x2C70ADF8    0x0070ADD4         (0x70ADF8 ^ 0x2C) = 0x70ADD4 ✓
+ *   Aspiration        0x28B64675    0x00B6465D         (0xB64675 ^ 0x28) = 0xB6465D ✓
+ *   AspirationTrack   0xC020FCAD    0x0020FC6D         (0x20FCAD ^ 0xC0) = 0x20FC6D ✓
+ *   Trait             0xCB5FDDC7    0x005FDD0C         (0x5FDDC7 ^ 0xCB) = 0x5FDD0C ✓
+ *   Buff              0x6017E896    0x0017E8F6         (0x17E896 ^ 0x60) = 0x17E8F6 ✓
+ *   Objective         0x0069453E    0x0069453E         (0x69453E ^ 0x00) = 0x69453E ✓
+ */
+function simDataGroupFor(tuningType) {
+    return ((tuningType & 0x00FFFFFF) ^ (tuningType >>> 24)) >>> 0;
+}
+
 // Tuning classes that *require* a SimData companion. Note "TunableCareerTrack"
 // is EA's canonical class name (matches what `c="..."` says in the XML); the
 // simdata library registers a CareerTrack alias under that name.
@@ -348,7 +377,7 @@ async function main() {
                     const ir = buildSimDataForTuning(tree, ctx);
                     const simBuffer = emitSimDataBuffer(ir);
                     entries.push({
-                        key: { type: SIMDATA_TYPE, group: 0, instance },
+                        key: { type: SIMDATA_TYPE, group: simDataGroupFor(resourceType), instance },
                         value: RawResource.from(simBuffer),
                     });
                     console.log(`    └─ + SimData (${simBuffer.byteLength}B, schema=${cAttr})`);
