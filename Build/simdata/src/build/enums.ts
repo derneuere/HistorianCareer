@@ -77,12 +77,17 @@ export const ASPIRATION_TRACK_LEVELS: EnumMap = Object.freeze({
 });
 
 /**
- * EA's `CareerCategory` enum. Verified from career_Teen_Retail.simdata:
- * `TeenPartTime` → 3n.
+ * EA's `CareerCategory` enum. Verified empirically:
+ *   `TeenPartTime` → 3n (career_Teen_Retail.simdata)
+ *   `Work`         → 1n (career_Adult_Writer.simdata, etc.) — every
+ *                        EA adult career uses this literal; the legacy
+ *                        `Active` was renamed to `Work`. Both names refer
+ *                        to the same enum value.
  */
 export const CAREER_CATEGORY: EnumMap = Object.freeze({
   Adult: 0n,
   Active: 1n,
+  Work: 1n,
   Volunteer: 2n,
   TeenPartTime: 3n,
   AdultPartTime: 4n,

@@ -19,6 +19,20 @@
     "HC_CAREER_NAME": "Historian",
     "HC_CAREER_DESCRIPTION": "Research the past, write the future. Requires a History degree (Discover University).",
 
+    "HC_COMPANY_UNIVERSITAET_BERLIN": "Universität Berlin",
+    "HC_COMPANY_PREUSSISCHER_KULTURBESITZ": "Stiftung Preußischer Kulturbesitz",
+    "HC_COMPANY_BUNDESARCHIV": "Bundesarchiv",
+    "HC_COMPANY_HUMBOLDT_INSTITUT": "Humboldt-Institut für Geschichtswissenschaften",
+    "HC_COMPANY_LEIBNIZ_GESELLSCHAFT": "Leibniz-Gesellschaft",
+
+    "HC_CAREER_JOIN_NOTIFICATION": "Willkommen am Lehrstuhl. Your first archive shift is calendared.",
+    "HC_CAREER_PROMOTE_NOTIFICATION": "Your academic standing has improved. A new title — and new duties — await.",
+    "HC_CAREER_FIRE_NOTIFICATION": "The department chair has terminated your Vertrag. The library lights are out for you tonight.",
+    "HC_CAREER_MISSING_WORK_NOTIFICATION": "The seminar room is empty. Your absence was noted.",
+    "HC_CAREER_PERFORMANCE_WARNING": "Your research output is slipping. The Habilitation committee is watching.",
+    "HC_CAREER_DAILY_END_HIGH_PERF": "Another solid day in the archives. A footnote-worthy performance.",
+    "HC_CAREER_DAILY_END_LOW_PERF": "Long day at the source. Tomorrow is another chance to find the missing line.",
+
     "HC_LEVEL_1_TITLE": "Research Assistant",
     "HC_LEVEL_1_DESC": "Part-time archival work for a faculty member. §40/h, 09:00–13:00.",
     "HC_LEVEL_1_DAILY": "Read non-fiction and transcribe sources.",
@@ -44,6 +58,8 @@
 
     "HC_ASPTRACK_NAME": "Historian's Calling",
     "HC_ASPTRACK_DESC": "Climb the German academic Karriereleiter from HiWi to Lehrstuhl.",
+    "HC_ASPTRACK_COMPLETE_TITLE": "Berufung erfüllt!",
+    "HC_ASPTRACK_COMPLETE_BODY": "You have walked the long road from HiWi to Lehrstuhl. The Habilitation is yours.",
     "HC_ASP_T1_NAME": "Begin Your Career",
     "HC_ASP_T1_DESC": "Work two manuscript-transcription shifts.",
     "HC_ASP_T2_NAME": "Defend Your Dissertation",
@@ -80,6 +96,20 @@
     "HC_CAREER_NAME": "Historiker:in",
     "HC_CAREER_DESCRIPTION": "Erforsche die Vergangenheit, schreibe die Zukunft. Voraussetzung: Geschichtsstudium (Discover University).",
 
+    "HC_COMPANY_UNIVERSITAET_BERLIN": "Universität Berlin",
+    "HC_COMPANY_PREUSSISCHER_KULTURBESITZ": "Stiftung Preußischer Kulturbesitz",
+    "HC_COMPANY_BUNDESARCHIV": "Bundesarchiv",
+    "HC_COMPANY_HUMBOLDT_INSTITUT": "Humboldt-Institut für Geschichtswissenschaften",
+    "HC_COMPANY_LEIBNIZ_GESELLSCHAFT": "Leibniz-Gesellschaft",
+
+    "HC_CAREER_JOIN_NOTIFICATION": "Willkommen am Lehrstuhl. Ihre erste Archivschicht ist eingetragen.",
+    "HC_CAREER_PROMOTE_NOTIFICATION": "Ihre akademische Stellung wurde aufgewertet. Ein neuer Titel — und neue Pflichten — erwarten Sie.",
+    "HC_CAREER_FIRE_NOTIFICATION": "Der Lehrstuhlinhaber hat Ihren Vertrag gekündigt. Heute Abend bleiben die Bibliothekslichter für Sie aus.",
+    "HC_CAREER_MISSING_WORK_NOTIFICATION": "Der Seminarraum ist leer. Ihre Abwesenheit wurde vermerkt.",
+    "HC_CAREER_PERFORMANCE_WARNING": "Ihre Forschungsleistung lässt nach. Die Habilitationskommission beobachtet das.",
+    "HC_CAREER_DAILY_END_HIGH_PERF": "Wieder ein guter Tag im Archiv. Eine fußnotenwürdige Leistung.",
+    "HC_CAREER_DAILY_END_LOW_PERF": "Langer Tag in den Quellen. Morgen ist die nächste Chance auf die fehlende Zeile.",
+
     "HC_LEVEL_1_TITLE": "Wissenschaftliche Hilfskraft",
     "HC_LEVEL_1_DESC": "Teilzeit-Archivarbeit für eine:n Hochschullehrende:n. §40/h, 09:00–13:00.",
     "HC_LEVEL_1_DAILY": "Sachbücher lesen und Quellen abschreiben.",
@@ -105,6 +135,8 @@
 
     "HC_ASPTRACK_NAME": "Berufung Historiker:in",
     "HC_ASPTRACK_DESC": "Aufstieg auf der Karriereleiter von HiWi bis Lehrstuhl.",
+    "HC_ASPTRACK_COMPLETE_TITLE": "Berufung erfüllt!",
+    "HC_ASPTRACK_COMPLETE_BODY": "Sie haben den langen Weg von der HiWi-Stelle bis zum Lehrstuhl zurückgelegt. Die Habilitation ist Ihre.",
     "HC_ASP_T1_NAME": "Karriere beginnen",
     "HC_ASP_T1_DESC": "Zwei Schichten Quellenabschrift.",
     "HC_ASP_T2_NAME": "Dissertation verteidigen",

@@ -1,24 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  L1: Wissenschaftliche Hilfskraft (Research Assistant / HiWi). 20h/week, low pay.
+  L1: Wissenschaftliche Hilfskraft (Research Assistant / HiWi). 20h/week part-time
+  morning shift, low pay.
 
-  Per EA's CareerLevel TDESC and the SecretAgent_Villain_Level3 golden:
-    - module is `careers.career_tuning` (not `careers.career_level`)
-    - the level's display title is `title` (not `level_title`)
-    - the level's tooltip blurb is `title_description` (not `level_description`)
-    - the per-level Aspiration reference is `aspiration` (not `level_aspiration`)
+  Per EA's CareerLevel TDESC (Build/simdata/test/fixtures/tdescs/CareerLevel.tdesc.json)
+  and the career_SecretAgent_Villain_Level3 golden:
+    - module is `careers.career_tuning`
+    - the level's display title is `title`
+    - the level's tooltip blurb is `title_description`
+    - the per-level Aspiration reference is `aspiration`
+    - the work schedule is an INLINE struct `<U n="work_schedule">`, NOT a
+      named reference to a CareerSchedule snippet (that field is `schedule`
+      and uses TunableCareerScheduleVariant; we use the deprecated-but-
+      still-supported `work_schedule` for parity with the SimData golden).
+    - performance_metrics + performance_stat are required by the runtime —
+      omitting them causes the live game to throw
+      `TunableCareerLocationRandomCompany` errors when the career is added
+      (smoke-test exception 2).
 -->
 <I c="CareerLevel" i="career_level" m="careers.career_tuning" n="career_level_Adult_Historian_L1" s="TBD_INSTANCE_ID">
   <T n="title">0xTBD_STBL_KEY_HC_LEVEL_1_TITLE</T>
   <T n="title_description">0xTBD_STBL_KEY_HC_LEVEL_1_DESC</T>
   <T n="simoleons_per_hour">40</T>
 
+  <!-- Performance commodity — our own per-career level statistic. -->
+  <T n="performance_stat">HC_Statistic_HistorianLevel</T>
+
+  <U n="performance_metrics">
+    <T n="base_performance">8</T>
+    <T n="missed_work_penalty">35</T>
+    <L n="mood_metrics"/>
+    <T n="performance_per_completed_goal">5</T>
+    <L n="statistic_metrics"/>
+    <L n="tested_metrics"/>
+  </U>
+
   <!--
-    Work schedule. EA references a CareerSchedule snippet — use `schedule_part_time_morning`
-    (M/T/W/Th/F 09:00-13:00) as a stand-in until we author our own. If your install pins
-    the snippet under a different namespace, swap in the one shown by S4S's Cruiser.
+    20h/week morning shift: Mon-Fri 09:00-13:00 (duration=4h). Same shape as
+    SecretAgent_Villain_Level3 golden.
   -->
-  <T n="schedule">schedule_career_part_time_morning</T>
+  <U n="work_schedule">
+    <L n="schedule_entries">
+      <U>
+        <U n="days_available">
+          <T n="0 SUNDAY">False</T>
+          <T n="1 MONDAY">True</T>
+          <T n="2 TUESDAY">True</T>
+          <T n="3 WEDNESDAY">True</T>
+          <T n="4 THURSDAY">True</T>
+          <T n="5 FRIDAY">True</T>
+          <T n="6 SATURDAY">False</T>
+        </U>
+        <T n="duration">4</T>
+        <U n="start_time">
+          <T n="hour">9</T>
+          <T n="minute">0</T>
+        </U>
+      </U>
+    </L>
+  </U>
+
+  <U n="wakeup_time">
+    <T n="hour">8</T>
+    <T n="minute">0</T>
+  </U>
 
   <!-- Daily task aspiration — what the player sees in the career UI. -->
   <T n="aspiration">aspiration_career_Historian_L1</T>

@@ -1,29 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Long-form aspiration "Historian's Calling" — 4 tiers strung together.
-  Showed to the player as a pick-on-creation aspiration; completing T4 grants the
-  Habilitation Renown trait.
+  Showed to the player as a pick-on-creation aspiration; completing T4 grants
+  the Habilitation Renown trait.
 
-  Per EA's AspirationTrack TDESC and the Track_Motor golden:
+  Per EA's AspirationTrack TDESC (Build/simdata/test/fixtures/tdescs/AspirationTrack.tdesc.json)
+  and the Track_Motor golden (Build/simdata/test/golden/AspirationTrack/Track_Motor.tuning.xml):
+
     - module is `aspirations.aspiration_tuning` (not `aspirations.aspiration_track`)
-    - i is `aspiration_track` (not `aspiration`)
-    - the category field is named `category` (not `aspiration_category`)
-    - the reward on track completion is a TunableReference named `reward`
-      (we put the trait under `provided_traits` so it is granted while the track
-      is active; the canonical reward chain lives in AspirationReward snippets).
+    - i is `aspiration_track`
+    - the category field is a TunableReference to an AspirationCategory snippet
+      (decimal instance ID), NOT an enum. Asp_Cat_Knowledge has instance ID
+      25385 (0x6329) — confirmed by enumerating CombinedTuning in the live game's
+      SimulationFullBuild0.package (see Build/simdata/scripts/find-aspiration-category.mjs).
+    - aspirations is a TunableMapping (LEVEL_X → aspiration ref), serialised as
+      a list of <U> tuples carrying `<E n="key">LEVEL_X</E>` and `<T n="value">…</T>`.
+    - reward is a required TunableReference to a SimReward / AspirationReward snippet.
+      We point at Reward_Knowledge_Chronicler (27489) — EA's reward for Track_Knowledge_A
+      ("Renaissance Sim"). This is a stand-in until we author our own AspirationReward.
+    - icon is a resource_key. We reuse Track_Knowledge_A's icon
+      (2f7d0004:00000000:70f4f2b9947509f5) as a thematically-close placeholder.
+    - notification is a TunableUiDialogNotification — the popup shown when the
+      track completes. We use generic EA-shipped STBL keys plus our own
+      HC_ASPTRACK_COMPLETE_TITLE / HC_ASPTRACK_COMPLETE_BODY.
+
+  Reward semantics: we previously listed the Habilitation Renown trait under
+  `<L n="provided_traits">`. That field IS in the TDESC (TunableSet) — these
+  traits get granted while this track is the Sim's primary aspiration and
+  removed when it isn't. We keep that block.
+
+  The `aspiration_track_completion` reward chain (the trait/buff/perk awarded
+  on FINAL tier completion) is a different field — `reward` (the
+  AspirationReward reference at the bottom of this file). Authoring our own
+  AspirationReward snippet is a v0.2 polish item.
 -->
 <I c="AspirationTrack" i="aspiration_track" m="aspirations.aspiration_tuning" n="aspiration_track_HistorianCalling" s="TBD_INSTANCE_ID">
-  <T n="display_text">0xTBD_STBL_KEY_HC_ASPTRACK_NAME</T>
-  <T n="description_text">0xTBD_STBL_KEY_HC_ASPTRACK_DESC</T>
-  <T n="category">KNOWLEDGE</T>
   <L n="aspirations">
-    <T>aspiration_HistorianCalling_T1</T>
-    <T>aspiration_HistorianCalling_T2</T>
-    <T>aspiration_HistorianCalling_T3</T>
-    <T>aspiration_HistorianCalling_T4</T>
+    <U>
+      <E n="key">LEVEL_1</E>
+      <T n="value">aspiration_HistorianCalling_T1</T>
+    </U>
+    <U>
+      <E n="key">LEVEL_2</E>
+      <T n="value">aspiration_HistorianCalling_T2</T>
+    </U>
+    <U>
+      <E n="key">LEVEL_3</E>
+      <T n="value">aspiration_HistorianCalling_T3</T>
+    </U>
+    <U>
+      <E n="key">LEVEL_4</E>
+      <T n="value">aspiration_HistorianCalling_T4</T>
+    </U>
   </L>
-  <!-- Reward trait granted while this track is the Sim's primary aspiration. -->
+  <!-- Asp_Cat_Knowledge — extracted from live game CombinedTuning. -->
+  <T n="category">25385</T>
+  <T n="description_text">0xTBD_STBL_KEY_HC_ASPTRACK_DESC</T>
+  <T n="display_text">0xTBD_STBL_KEY_HC_ASPTRACK_NAME</T>
+  <!--
+    Icon: Track_Knowledge_A ("Renaissance Sim") icon, thematically close to a
+    History/scholarship aspiration. Swap to a custom .png once we ship one.
+  -->
+  <T n="icon" p="InGame\UI\Icons\CAS\Aspirations\Aspiration_Knowledge1.png">2f7d0004:00000000:70f4f2b9947509f5</T>
+  <U n="notification">
+    <V n="text" t="single">
+      <T n="single">0xTBD_STBL_KEY_HC_ASPTRACK_COMPLETE_BODY</T>
+    </V>
+    <V n="title" t="enabled">
+      <T n="enabled">0xTBD_STBL_KEY_HC_ASPTRACK_COMPLETE_TITLE</T>
+    </V>
+    <L n="ui_responses">
+      <U>
+        <!-- Reuse EA's "Choose New Aspiration" response text (0x7E8E7CD3). -->
+        <T n="text">0x7E8E7CD3</T>
+        <E n="ui_request">SHOW_ASPIRATION_SELECTOR</E>
+      </U>
+    </L>
+    <E n="urgency">DEFAULT</E>
+  </U>
+  <!--
+    Reward trait granted while this track is the Sim's primary aspiration. -->
   <L n="provided_traits">
     <T>trait_HabilitationRenown</T>
   </L>
+  <!--
+    Reward chain awarded on completing the FINAL aspiration tier in this track.
+    Reward_Knowledge_Chronicler (27489) is EA's "Renaissance Sim" reward —
+    it grants a renaissance-themed trait/perk set. Adequate stand-in until we
+    author our own AspirationReward snippet that grants e.g. a research-bonus
+    perk. TODO: replace with HC-authored AspirationReward.
+  -->
+  <T n="reward">27489</T>
 </I>
