@@ -36,6 +36,10 @@ import { Package, XmlResource, StringTableResource, RawResource } from "@s4tk/mo
 import { StringTableLocale, TuningResourceType, BinaryResourceType } from "@s4tk/models/enums.js";
 import { fnv32, fnv64 } from "@s4tk/hashing/hashing.js";
 import { formatAsHexString } from "@s4tk/hashing/formatting.js";
+// @s4tk/images: PNG → DDS BC3 encoder (DXT5 + mipmap chain). Resolved
+// transitively via @s4tk/models, but listed explicitly in package.json so
+// the dependency is visible and pinned. See issue #18.
+import { DdsImage } from "@s4tk/images";
 
 // simdata: our hand-rolled SimData generator that replaces the last S4S step.
 // Built from ../simdata. Loaded from its compiled output under ./dist.
@@ -59,28 +63,37 @@ const ICONS_DIR = path.join(__dirname, "..", "icons");
 const OUT_DIR = path.join(__dirname, "..", "out");
 const OUT_PACKAGE = path.join(OUT_DIR, "HistorianCareer_Tuning.package");
 
-// PNG image resource type for embedded image resources.
+// Image resource type for embedded icon resources.
 //
 // IMPORTANT: there are TWO image-related type codes in Sims 4. They are NOT
 // interchangeable:
 //
-//   0x00B2D882  "PNG image"        — the type ACTUAL stored image resources
-//                                    live at. SimData ResourceKey columns
-//                                    for icon/icon_high_res/image point at
-//                                    this type.
-//   0x2F7D0004  "TGI icon ref"     — a marker type used in Tuning XML as the
+//   0x00B2D882  "DDS image"        — the type ACTUAL stored career/aspiration
+//                                    icons live at, in DDS (DirectDraw Surface)
+//                                    format. SimData ResourceKey columns for
+//                                    icon/icon_high_res/image point at this
+//                                    type after the generator rewrite.
+//   0x2F7D0004  "PNG icon ref"     — a marker type used in Tuning XML as the
 //                                    "type" segment of <T n="icon">…</T>
-//                                    resource keys. The SimData generator
-//                                    rewrites 0x2F7D0004 → 0x00B2D882 when
-//                                    serializing ResourceKey cells.
+//                                    resource keys, and the type of the 3 raw
+//                                    PNGs EA ships in ClientFullBuild0. The
+//                                    SimData generator rewrites 0x2F7D0004 →
+//                                    0x00B2D882 when serializing ResourceKey
+//                                    cells, so SimData lookups land on the
+//                                    actual DDS resource.
 //
-// We embed icon PNGs at 0x00B2D882. The Tuning XML can still reference them
-// with the 0x2F7D0004 marker — the simdata rewrite makes the lookup land on
-// our 0x00B2D882 resource at the same instance.
+// Verified by surveying Data/Client/ClientFullBuild0.package:
+//   - 136 resources at type 0x00B2D882 — every one starts with the DDS file
+//     signature ("DDS ", 0x44 0x44 0x53 0x20).
+//   - 3 resources at type 0x2F7D0004 — every one starts with the PNG signature
+//     (0x89 0x50 0x4E 0x47).
+// Career icons specifically use the 0x00B2D882 DDS path (sample: Writer_Track1
+// SimData, instance 0x7508 — icon column has type=0xB2D882, decodes as DXT5).
 //
-// Verified by inspecting an EA-shipped CareerTrack SimData (Writer_Track1,
-// instance 0x7508): icon column has type=0xB2D882.
-const PNG_TYPE = 0x00B2D882;
+// Until issue #18, this build embedded raw PNG bytes at 0x00B2D882, which the
+// renderer silently fell back to the default icon on (PNG ≠ DDS at the byte
+// level). We now convert PNG → DDS BC3 at build time via @s4tk/images.
+const DDS_TYPE = 0x00B2D882;
 
 // CLI flag --include-layer-b includes the resources that require SimData companions.
 // Layer A is the drop-in default; the package is loadable as-is.
@@ -168,17 +181,22 @@ async function main() {
     console.log(`[builder] ${keyNames.length} STBL keys across ${localeNames.length} locale(s): ${localeNames.join(", ")}`);
 
     // -----------------------------------------------------------------------
-    // 1b. Embed custom PNG icons from Build/icons/.
+    // 1b. Embed custom icons from Build/icons/.
     //
-    // For each .png in that folder, the build registers a resource of type
-    // 0x2F7D0004 (Sims 4's PNG image type) with instance = fnv64(basename, true).
-    // It also adds an entry to nameToInstance so tuning XML files can reference
-    // the icon by its bare filename, e.g.
+    // Inputs are .png files; outputs are DDS BC3 (DXT5) resources at type
+    // 0x00B2D882 — that's the format Sims 4's career-icon renderer expects.
+    // See the DDS_TYPE block above for the why. @s4tk/images converts via
+    // Jimp → silent-dxt-js with a full mipmap chain (matches EA's icons).
+    //
+    // For each .png the build registers ONE DDS resource at type 0x00B2D882
+    // with instance = fnv64(basename, true). Tuning XML can reference the
+    // icon by bare filename, e.g.
     //     <T n="icon" p="...">Career_Historian_Main.png</T>
-    // The Pass 2 name resolver swaps this for the resource key the game looks up.
-    // The XML emit format Sims 4 expects for an icon ref is:
+    // The Pass 2 name resolver rewrites that to the TGI form Sims 4 expects:
     //     <T n="icon" p="path/for/preview.png">2f7d0004:00000000:{16 hex}</T>
-    // So we also rewrite the inner text to that full TGI form after resolving.
+    // (Note: the marker type stays 0x2F7D0004 in tuning XML — the SimData
+    // generator rewrites it to 0x00B2D882 when serializing, so the runtime
+    // lookup lands on the DDS resource we stored here.)
     // -----------------------------------------------------------------------
     /** @type {Map<string, bigint>} iconFilename → 64-bit resource instance */
     const iconNameToInstance = new Map();
@@ -187,16 +205,25 @@ async function main() {
         const iconFiles = (await fs.readdir(ICONS_DIR))
             .filter(f => f.toLowerCase().endsWith(".png"));
         for (const file of iconFiles) {
-            const buf = await fs.readFile(path.join(ICONS_DIR, file));
+            const pngBuf = await fs.readFile(path.join(ICONS_DIR, file));
+            // PNG → DDS BC3 (DXT5) with mipmaps. Defaults: maxMipMaps=15
+            // (i.e. full chain down to 1×1), shuffle=false (DXT5, not DST5).
+            // The library resizes non-power-of-2 inputs internally.
+            const dds = await DdsImage.fromImageAsync(pngBuf);
+            const ddsBuf = dds.buffer;
             const instance = fnv64(file, true);
             iconNameToInstance.set(file, instance);
             iconEntries.push({
-                key: { type: PNG_TYPE, group: 0, instance },
-                value: RawResource.from(buf),
+                key: { type: DDS_TYPE, group: 0, instance },
+                value: RawResource.from(ddsBuf),
             });
-            console.log(`  + icon ${file.padEnd(46)} type=PNG                  instance=0x${instance.toString(16)} (${buf.byteLength}B)`);
+            console.log(
+                `  + icon ${file.padEnd(46)} type=DDS(DXT5)            ` +
+                `instance=0x${instance.toString(16)} ` +
+                `(PNG ${pngBuf.byteLength}B → DDS ${ddsBuf.byteLength}B, ${dds.header.width}×${dds.header.height}, ${dds.header.mipCount} mips)`,
+            );
         }
-        console.log(`[builder] embedded ${iconFiles.length} icon PNG(s) from Build/icons/`);
+        console.log(`[builder] embedded ${iconFiles.length} icon(s) as DDS BC3 from Build/icons/`);
     }
 
     // -----------------------------------------------------------------------
