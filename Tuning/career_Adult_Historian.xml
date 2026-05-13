@@ -97,9 +97,39 @@
     wired, swap to that.
   -->
   <U n="career_messages">
+    <!--
+      career_assignment_summary_notification: end-of-shift summary for the
+      work-from-home (WFH) path. Our career doesn't enable WFH today (no
+      work_from_home_text / career_early_warning_alarm), so this never fires
+      in practice; tuned here as a forward-compatibility stub with a single
+      always-matching record so that *if* WFH is ever enabled, the dialog
+      won't render empty (the same default-empty-TunableTuple class of bug
+      that bit us on join_career_notification and promote rewardless).
+    -->
+    <V n="career_assignment_summary_notification" t="tested">
+      <U n="tested">
+        <L n="records">
+          <U>
+            <U n="item">
+              <V n="text" t="single">
+                <T n="single">0xTBD_STBL_KEY_HC_CAREER_WFH_SUMMARY</T>
+              </V>
+            </U>
+            <L n="tests"/>
+          </U>
+        </L>
+      </U>
+    </V>
+    <!--
+      career_daily_end_notification: end-of-shift performance summary. EA's
+      Tunable list is named `records`, not `items` — we previously used `items`
+      which silently parsed as an unknown field and the list defaulted empty,
+      so neither the high- nor low-performance line ever rendered. Renamed to
+      match EA's Career Type Work shape.
+    -->
     <V n="career_daily_end_notification" t="tested">
       <U n="tested">
-        <L n="items">
+        <L n="records">
           <U>
             <U n="item">
               <V n="text" t="single">
@@ -128,29 +158,51 @@
                 <T n="single">0xTBD_STBL_KEY_HC_CAREER_DAILY_END_LOW_PERF</T>
               </V>
             </U>
+            <L n="tests"/>
           </U>
         </L>
       </U>
     </V>
-    <U n="career_missing_work">
-      <T n="affordance">77302</T>
-      <U n="dialog">
-        <V n="icon" t="enabled">
-          <V n="enabled" t="resource_key">
-            <U n="resource_key">
-              <T n="key" p="InGame\UI\Icons\Headlines\Final\headline_careersimoleons.png">2f7d0004:00000000:617140672fa22f7b</T>
-            </U>
-          </V>
-        </V>
-        <E n="phone_ring_type">RING</E>
-        <V n="text" t="single">
-          <T n="single">0xTBD_STBL_KEY_HC_CAREER_MISSING_WORK_NOTIFICATION</T>
-        </V>
-        <V n="title" t="enabled">
-          <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
-        </V>
-      </U>
+    <!--
+      career_daily_start_notification: "off to work" popup when the Sim leaves
+      for their shift. Title intentionally omitted (EA's Writer career also
+      omits it here). Text uses {0.SimFirstName}.
+    -->
+    <U n="career_daily_start_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_DAILY_START</T>
+      </V>
     </U>
+    <!--
+      career_early_warning_notification: "one hour to work" reminder. EA's
+      Writer career omits a title on this one too.
+    -->
+    <U n="career_early_warning_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_EARLY_WARNING</T>
+      </V>
+    </U>
+    <V n="career_missing_work" t="enabled">
+      <U n="enabled">
+        <T n="affordance">77302</T>
+        <U n="dialog">
+          <V n="icon" t="enabled">
+            <V n="enabled" t="resource_key">
+              <U n="resource_key">
+                <T n="key" p="InGame\UI\Icons\Headlines\Final\headline_careersimoleons.png">2f7d0004:00000000:617140672fa22f7b</T>
+              </U>
+            </V>
+          </V>
+          <E n="phone_ring_type">RING</E>
+          <V n="text" t="single">
+            <T n="single">0xTBD_STBL_KEY_HC_CAREER_MISSING_WORK_NOTIFICATION</T>
+          </V>
+          <V n="title" t="enabled">
+            <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+          </V>
+        </U>
+      </U>
+    </V>
     <U n="career_performance_warning">
       <T n="affordance">77301</T>
       <U n="dialog">
@@ -190,15 +242,59 @@
         <T n="enabled">0x1FD4456D</T>
       </V>
     </U>
-    <U n="join_career_notification">
+    <V n="join_career_notification" t="enabled">
+      <U n="enabled">
+        <V n="text" t="single">
+          <T n="single">0xTBD_STBL_KEY_HC_CAREER_JOIN_NOTIFICATION</T>
+        </V>
+        <V n="title" t="enabled">
+          <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+        </V>
+      </U>
+    </V>
+    <!--
+      overmax_notification / overmax_rewardless_notification: fire when the Sim
+      is already at the top career level (Full Professor W3) and continues to
+      hit performance thresholds — Sims 4 represents this as a "raise" rather
+      than a further promotion. The split mirrors promote_*_notification: the
+      reward-bearing form is used when the level grants a bonus item, the
+      rewardless form when it doesn't. We tune both with the same text/title
+      because our L5 has no bonus reward today.
+    -->
+    <U n="overmax_notification">
       <V n="text" t="single">
-        <T n="single">0xTBD_STBL_KEY_HC_CAREER_JOIN_NOTIFICATION</T>
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_OVERMAX_NOTIFICATION</T>
       </V>
       <V n="title" t="enabled">
-        <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+        <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_OVERMAX_TITLE</T>
+      </V>
+    </U>
+    <U n="overmax_rewardless_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_OVERMAX_NOTIFICATION</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_OVERMAX_TITLE</T>
       </V>
     </U>
     <U n="promote_career_notification">
+      <V n="text" t="single">
+        <T n="single">0xTBD_STBL_KEY_HC_CAREER_PROMOTE_NOTIFICATION</T>
+      </V>
+      <V n="title" t="enabled">
+        <T n="enabled">0x54E0293D</T>
+      </V>
+    </U>
+    <!--
+      promote_career_rewardless_notification: shown when the new level has no
+      bonus reward (none of our L1..L5 currently tune <U n="bonus">), which is
+      the path our promotions actually take. EA's career.py picks between the
+      two promote_* tunings based on whether the destination level grants a
+      reward; omitting this field made promotions silently render an empty
+      dialog. Body/title intentionally identical to promote_career_notification
+      because our text doesn't reference a bonus token.
+    -->
+    <U n="promote_career_rewardless_notification">
       <V n="text" t="single">
         <T n="single">0xTBD_STBL_KEY_HC_CAREER_PROMOTE_NOTIFICATION</T>
       </V>
