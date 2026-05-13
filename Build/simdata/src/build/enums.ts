@@ -96,14 +96,36 @@ export const CAREER_CATEGORY: EnumMap = Object.freeze({
 
 /**
  * EA's `AspirationValidAgeType` enum.
+ *
+ * IMPORTANT: these are AGE BITMASKS (powers of two), NOT sequential ordinals.
+ * EA's runtime does `sim_info.age & aspiration_valid_age_type`; both sides
+ * are bitmasks from `sims.sim_info_types.Age`:
+ *   TODDLER=2, CHILD=4, TEEN=8, YOUNGADULT=16, ADULT=32, ELDER=64.
+ * TEEN_OR_OLDER = TEEN | YOUNGADULT | ADULT | ELDER = 8|16|32|64 = 120.
+ *
+ * The previous values in this table (TODDLER_ONLY=1, CHILD_ONLY=2, ...,
+ * YAE_ONLY=5) were guesses — sequential ordinals that don't match EA's
+ * bitmask scheme. Names like `TEEN_AND_YAE` and `YAE_ONLY` aren't even
+ * members of EA's enum; the real members are below. Confirmed by
+ * decompiling EA's `aspirations/aspiration_tuning.pyc` and inspecting
+ * `co_names` for the enum class. See Docs/NOTE_aspiration_track_registration.md.
+ *
+ * Effect of the previous bad values: `<E n="aspiration_valid_age_type">
+ * YAE_ONLY</E>` at XML load failed the enum-name lookup → fell back to
+ * INVALID (0) → `sim_info.age & 0 = 0` → `is_valid_for_sim` returned
+ * False → AspirationTrack filtered out of the CAS picker, the age-up
+ * dialog, and the primary-aspiration fallback. This is the root cause
+ * issue #13 thought it was fixing but didn't.
  */
 export const ASPIRATION_VALID_AGE_TYPE: EnumMap = Object.freeze({
   INVALID: 0n,
-  TODDLER_ONLY: 1n,
-  CHILD_ONLY: 2n,
-  TEEN_AND_YAE: 3n,
-  TEEN_ONLY: 4n,
-  YAE_ONLY: 5n,
+  TODDLER_ONLY: 2n,
+  CHILD_ONLY: 4n,
+  TEEN_ONLY: 8n,
+  // TEEN | YOUNGADULT | ADULT | ELDER. Our HistorianCalling aspiration uses
+  // this — career is adult-only but the aspiration itself is selectable
+  // from teen onward (the standard EA pattern for adult-themed tracks).
+  TEEN_OR_OLDER: 120n,
 });
 
 /**

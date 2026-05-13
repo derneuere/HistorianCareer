@@ -1,17 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Long aspiration tier 1: "Begin your career as a Historian (HiWi)." -->
 <!--
-  aspiration_valid_age_type must be set to a non-INVALID enum value (issue #13).
-  EA's runtime `Aspiration.is_valid_for_sim` (aspirations/aspiration_tuning.py)
-  indexes an age-list tuple keyed by this enum; the default `INVALID` (0) value
-  produces an IndexError ("tuple index out of range") when a Sim with this
-  aspiration is loaded. Historian is an adult-only career, so we pick
-  `YAE_ONLY` (Young Adult / Adult / Elder).
+  aspiration_valid_age_type — set to a real EA enum member (issue #13
+  follow-up). Original fix used YAE_ONLY which is NOT a member of EA's
+  AspirationValidAgeType enum (confirmed by decompiling
+  aspirations/aspiration_tuning.pyc). At XML load the unknown name
+  silently fell back to INVALID (0); EA's runtime does
+  `sim_info.age & aspiration_valid_age_type` so any value of 0 returns
+  falsy from is_valid_for_sim and the aspiration is hidden from CAS,
+  the age-up dialog, and the primary-aspiration fallback. The IndexError
+  on Sim load went away because we exited the path before the index
+  lookup — but the track was invisible everywhere downstream.
+
+  Real enum members: INVALID=0, TODDLER_ONLY=2, CHILD_ONLY=4,
+  TEEN_ONLY=8, TEEN_OR_OLDER=120 (these are AGE BITMASKS, NOT ordinals).
+
+  Historian's Calling is selectable from teen onward (same pattern as
+  EA's adult-themed Renaissance Sim aspiration). See
+  Docs/NOTE_aspiration_track_registration.md for the full trace.
 -->
 <I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T1" s="TBD_INSTANCE_ID">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T1_NAME</T>
   <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T1_DESC</T>
-  <E n="aspiration_valid_age_type">YAE_ONLY</E>
+  <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
   <L n="objectives">
     <T>objective_HC_RunTranscribeManuscript_x2</T>
   </L>
