@@ -11,5 +11,6 @@ Scripts/**/*.pyc
 .vscode/
 *.swp
 
-# SWF research extracts (binary EA assets — do NOT commit)
+# Research scratch (binary EA assets — do NOT commit)
+Build/_research_tmp/
 swf-extracts/

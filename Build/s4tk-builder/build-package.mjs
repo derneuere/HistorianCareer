@@ -122,6 +122,12 @@ import {
 // pure passes, separated so the swap logic can be unit-tested without IO.
 import { collectTuningNames, resolveNamesInXml } from "./resolve-names.mjs";
 
+// Build-time guard against silent enum-name fallbacks (issue #17). EA's
+// Tunable XML parser silently falls back to the enum default on an unknown
+// member name, which makes the affected resource quietly disappear from
+// runtime UI. The validator throws if any tracked field uses a non-member.
+import { assertKnownEnumValues } from "./validate-enums.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const TUNING_DIR = path.join(PROJECT_ROOT, "Tuning");
@@ -328,6 +334,12 @@ async function main() {
     }
     const nameToInstance = collectTuningNames(rawXmlByFile);
     console.log(`[builder] resolved ${nameToInstance.size} tuning name(s) → instance IDs`);
+
+    // Pass 1b: assert every tracked `<E n="…">VALUE</E>` body is a real EA
+    // enum member. Throws with a precise diff if any file has a silent-
+    // fallback-bait value (e.g. the YAE_ONLY ↔ TEEN_OR_OLDER bug from #17).
+    // Pure check — no XML rewrite, no IO.
+    assertKnownEnumValues(rawXmlByFile);
 
     const entries = []; // { key: {type, group, instance}, value: Resource }
     const usedInstances = new Map(); // instance(bigint) -> tuningName  (collision check)
