@@ -356,11 +356,21 @@ async function install({ modsFolder, packageOnly, scriptOnly }) {
 // game" risks the player seeing yesterday's build.
 //
 // We delete:
-//   localthumbcache.package        primary thumbnail cache
-//   Onlinethumbnailcache.package   Gallery / online cache
-//   avatarcache.package            sim avatar cache
-//   cachestr/   (contents)         streamed asset cache
-//   cache/      (contents)         general resource cache
+//   localthumbcache.package           primary thumbnail cache
+//   localsimtexturecache.package      Sim texture cache (large; ~30MB+)
+//   localsimtravelthumbcache.package  travel-screen Sim thumbnail cache
+//   Onlinethumbnailcache.package      Gallery / online cache (legacy filename)
+//   avatarcache.package               sim avatar cache
+//   accountDataDB.package             account-side DB cache
+//   clientDB.package                  client-side DB cache
+//   houseDescription-client.package   house-description cache
+//   cachestr/      (contents)         streamed asset cache
+//   cache/         (contents)         general resource cache
+//   onlinethumbnailcache/ (contents)  Gallery / online thumbnail cache (current)
+//
+// Without the DB-package caches, Sims 4 has been observed to silently filter
+// mod-added aspirations / careers from binary-indexed CAS pickers even after
+// the tuning + SimData are byte-correct (refs #17).
 //
 // We leave lastException*.txt / lastUIException*.txt alone — those are
 // diagnostic logs from previous crashes; deleting them masks the very
@@ -371,10 +381,15 @@ async function nukeCache({ userDataFolder }) {
   log(`==> Clearing Sims 4 caches in ${userDataFolder}`);
   const files = [
     "localthumbcache.package",
+    "localsimtexturecache.package",
+    "localsimtravelthumbcache.package",
     "Onlinethumbnailcache.package",
     "avatarcache.package",
+    "accountDataDB.package",
+    "clientDB.package",
+    "houseDescription-client.package",
   ];
-  const dirs = ["cachestr", "cache"];
+  const dirs = ["cachestr", "cache", "onlinethumbnailcache"];
 
   let cleared = 0;
   for (const f of files) {
