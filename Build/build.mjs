@@ -118,6 +118,36 @@ async function exists(p) {
 }
 
 /**
+ * Returns true when any `.ts` file under `<simdataDir>/src` has an mtime newer
+ * than the freshest file in `<simdataDir>/dist`. Cheap, no hashing — just stat
+ * traversal. Used to decide whether tsc needs to re-run before each build.
+ */
+async function isSourceNewerThanDist(simdataDir) {
+  const srcDir = path.join(simdataDir, "src");
+  const distDir = path.join(simdataDir, "dist");
+  if (!(await exists(srcDir)) || !(await exists(distDir))) return true;
+  async function newestMtimeUnder(root, extFilter) {
+    let newest = 0;
+    async function walk(dir) {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) await walk(p);
+        else if (!extFilter || extFilter(e.name)) {
+          const stat = await fs.stat(p);
+          if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+        }
+      }
+    }
+    await walk(root);
+    return newest;
+  }
+  const srcNewest  = await newestMtimeUnder(srcDir,  n => n.endsWith(".ts"));
+  const distNewest = await newestMtimeUnder(distDir, n => n.endsWith(".js"));
+  return srcNewest > distNewest;
+}
+
+/**
  * Auto-detect the Sims 4 user-data folder. The game localizes its folder name
  * by language (Die Sims 4 / Les Sims 4 / Los Sims 4 / …). Prefer the sibling
  * under ~/Documents/Electronic Arts/ that has an Options.ini (the marker that
@@ -146,12 +176,18 @@ async function buildPackage({ layerB }) {
   log(`==> Building ${path.relative(PROJECT_ROOT, PACKAGE_OUT)} (s4tk-builder)`);
 
   // Ensure simdata is npm-installed and tsc-compiled when Layer B is wanted.
+  // Also recompile when any source file is newer than the dist (otherwise edits
+  // to schemas.ts or classes/index.ts silently don't reach the build until you
+  // manually rm -rf dist/). Common dev-loop trap: agent edits a .ts schema,
+  // build runs the stale dist, package ships without the new class registered.
   if (await exists(SIMDATA_DIR)) {
     if (!(await exists(path.join(SIMDATA_DIR, "node_modules")))) {
       log("    installing simdata dependencies...", "gray");
       await run("npm", ["install", "--silent"], { cwd: SIMDATA_DIR });
     }
-    if (!(await exists(path.join(SIMDATA_DIR, "dist", "index.js")))) {
+    const distIndex = path.join(SIMDATA_DIR, "dist", "index.js");
+    const needsCompile = !(await exists(distIndex)) || (await isSourceNewerThanDist(SIMDATA_DIR));
+    if (needsCompile) {
       log("    compiling simdata (tsc)...", "gray");
       await run("npx", ["tsc"], { cwd: SIMDATA_DIR });
     }
