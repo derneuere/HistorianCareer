@@ -76,7 +76,20 @@
                                                      "save space" optimization
                                                      doesn't apply)
 -->
-<I c="Commodity" i="commodity" m="statistics.commodity" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
+<!-- i="statistic" intentional even though c="Commodity": EA's `Commodity` Python
+     class is registered under the same instance manager as Statistic (verified
+     in commodity.pyc: `manager=services.get_instance_manager(sims4.resources.Types.STATISTIC)`).
+     The `i=` attribute drives the DBPF resource type code -- `i="statistic"`
+     maps to 0x339BC5BD (TuningResourceType.Statistic), which Sims 4 routes to
+     the STATISTIC manager.  Using `i="commodity"` produces a different type
+     code (0x03B33DDF, observed in our build) that Sims 4 silently does NOT
+     route to STATISTIC, so the resource never registers and the
+     career_Adult_Historian fails to attach because its CareerLevel.performance_stat
+     reference resolves to None.  This was the root cause of the
+     "careers.add_career silently fails" symptom; verified by the
+     affordance_injector HC_* enumeration showing 3 stats (all EA auto-tracking,
+     none ours) when we shipped at i="commodity". -->
+<I c="Commodity" i="statistic" m="statistics.commodity" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
   <T n="min_value_tuning">-100</T>
   <T n="max_value_tuning">100</T>
   <!-- initial_tuning is a TunableTuple. Commodity OVERRIDES Statistic's nested
