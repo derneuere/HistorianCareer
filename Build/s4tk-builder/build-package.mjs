@@ -128,6 +128,15 @@ import { collectTuningNames, resolveNamesInXml } from "./resolve-names.mjs";
 // runtime UI. The validator throws if any tracked field uses a non-member.
 import { assertKnownEnumValues } from "./validate-enums.mjs";
 
+// Build-time guard against null/zero AspirationTrack + Aspiration SimData
+// fields (issue #17 follow-up). EA's Olympus AS3 client lazy-loads the track
+// catalog via `AspirationTrackStaticData.INIT_DATA()`, which dereferences
+// `_loc4_.aspirations.length` directly — null in that field crashes the
+// entire CAS aspiration picker for the whole session. The validator throws
+// at build time if any column EA always populates non-null is null/zero in
+// our emitted SimData.
+import { assertSimDataPopulated } from "./validate-simdata.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const TUNING_DIR = path.join(PROJECT_ROOT, "Tuning");
@@ -546,6 +555,27 @@ async function main() {
     // 5. Serialize and write the .package.
     // -----------------------------------------------------------------------
     const pkg = new Package(entries);
+
+    // Defensive check: every AspirationTrack + Aspiration SimData must
+    // populate the columns EA's shipping rows always populate non-null.
+    // A null/zero cell here can crash the Olympus AS3 client at game launch
+    // via `AspirationTrackStaticData.INIT_DATA()._loc4_.aspirations.length`,
+    // and once that throws STATIC_DATA_PER_CATEGORY stays uninitialised —
+    // i.e. NO aspiration tracks render in CAS, not even EA's. See issue #17
+    // and Docs/NOTE_cas_aspiration_picker_swf.md §5.
+    //
+    // This runs AFTER all SimData has been generated (so we catch any
+    // regression that nulls out a field downstream) but BEFORE we serialise
+    // to disk (so a regression never ships). Errors from this check abort
+    // the build.
+    if (INCLUDE_LAYER_B) {
+      const { tracksChecked, aspirationsChecked } = assertSimDataPopulated(pkg);
+      console.log(
+        `[ok]   SimData populated-fields check: ${tracksChecked} AspirationTrack(s), ` +
+          `${aspirationsChecked} Aspiration(s) — all required fields non-null.`,
+      );
+    }
+
     const buffer = pkg.getBuffer();
     await fs.writeFile(OUT_PACKAGE, buffer);
 
