@@ -1,109 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  HC career-performance commodity. Drives the per-shift Performance bar in
-  the expanded Career Panel (PerformanceDetails.as in the Olympus UI) and
-  the promotion/demotion/firing thresholds in EA's CareerLevel logic.
+  HC career-performance statistic. Drives the per-shift Performance bar in
+  the expanded Career Panel and the promote/demote/fire thresholds in EA's
+  CareerLevel logic.
 
-  CLASS: Commodity, NOT bare Statistic
-  ------------------------------------
-  EA's `CareerLevel.performance_stat` field is documented (in
-  `simulation.zip:careers/career_tuning.pyc:CareerLevel.INSTANCE_TUNABLES`) as:
+  SHAPE: copied verbatim from EA's statistic_Career_Performance_Writer
+  --------------------------------------------------------------------
+  Extracted from `Data/Simulation/SimulationFullBuild0.package` via
+  `Build/_research_tmp/extract-writer-ref.mjs` (gitignored). EA's full
+  file is exactly:
 
-      'performance_stat': sims4.tuning.tunable.TunableReference(
-          services.get_instance_manager(sims4.resources.Types.STATISTIC),
-          description="Commodity used to track career performance for this level.",
-          export_modes=ExportModes.All,
-          tuning_group=GroupNames.SCORING),
+      [I c=Statistic i=statistic m=statistics.statistic n=statistic_Career_Performance_Writer s=27784]
+        [T n=initial_value]0[/T]
+        [T n=max_value_tuning]100[/T]
+        [T n=min_value_tuning]-100[/T]
+      [/I]
 
-  The TunableReference's manager is STATISTIC (which holds both Statistic
-  and Commodity classes since Commodity extends Statistic — see
-  `statistics/commodity.pyc:class Commodity(TunedContinuousStatistic, ..., manager=STATISTIC)`),
-  but the description says "Commodity".  The CareerLevel runtime references
-  the commodity-specific interface — convergence, distress thresholds,
-  off-lot simulation flags, `_add_if_not_in_tracker` etc.  A bare Statistic
-  is accepted at the TunableReference layer but Sims 4 1.124.55 silently
-  REJECTS THE WHOLE RESOURCE when it doesn't pass the Commodity validation
-  expected by the consumer.  Verified empirically: 0..5 Statistic registered
-  fine (1157 STATISTIC manager count) but -100..+100 Statistic dropped it
-  (1156 count) — because the negative-min only makes sense as a Commodity.
+  Three tunables, class=Statistic (NOT Commodity — verified against EA's
+  shipped tunings: every adult-career performance stat in the writer-ref
+  extract is class=Statistic with this exact 3-field shape).  `initial_value`
+  is a deprecated shortcut for `initial_tuning._initial_value` and IS
+  accepted by Sims 4 1.124.55's tuning loader.
+
+  WHY NOT EXPLICIT `initial_tuning` TUPLE
+  ---------------------------------------
+  The structured form `[U n=initial_tuning][T n=_initial_value]0[/T][/U]`
+  is also valid but our earlier attempts at that shape failed to register
+  with our 31-bit instance ID.  Matching EA's shape exactly removes one
+  variable from the debugging space.
+
+  17-BIT INSTANCE ID (s=99701)
+  ----------------------------
+  EA's career-performance statistics live at s=27784 (Writer), s=27783
+  (TechGuru), s=16662 (generic base) — all 16/17-bit.  lot51-core's
+  `patches/custom_filter_career_fix.py` shows EA's runtime has a known
+  bug that drops 64-bit instance IDs from career-related dicts; the same
+  truncation may apply silently to Statistic IDs.  Our 31-bit ID
+  (0x3F16A005, from smallInstanceIdFor) was working for every other HC
+  tuning but the affordance_injector diagnostic shows HC_Statistic_*
+  NEVER appearing in Types.STATISTIC.  Force a 17-bit ID in the EA range
+  to remove that variable too.
+
+  Specifically: 99701 = 0x18575, comfortably above EA's used range
+  (16662..27784 for performance stats; ~70000 max for any EA stat per
+  the SMALL_ID hints in pie-menu-category-id.mjs) and 17-bit clean.
 
   RANGE -100..+100
   ----------------
-  Matches every adult-career performance commodity EA ships (Writer,
-  Entertainer, Criminal, Culinary, …).  Critical for our existing
-  Career-level scoring tunables, which the previous 0..5 range silently
-  disabled:
-
-      promote_performance_level=100.0   (EA default; reached at max perf)
-      demotion_performance_level=-80.0  (EA default; demoted if you sink)
-      fired_performance_level=-95.0     (EA default; fired if you tank)
-      career_performance_warning.threshold.value=-50  (HC tuning;
-                                                       warn at half-tank)
-      performance_metrics.base_performance=8           (per shift)
-      performance_per_completed_goal=5                 (per completed task)
-      missed_work_penalty=35                           (skipping work)
-
-  At 0..5 a single completed task saturated the bar; at -100..+100 each
-  shift moves the bar ~10-20 points, completing a daily-task line takes
-  ~2 weeks, promotion is realistic, and the demotion/firing thresholds
-  finally fire.
-
-  WHY NOT EMIT A SimData COMPANION
-  --------------------------------
-  Tried in commit aabcb30 (schema hash 0x8273c673, 3 cols max/min/stat_name).
-  Sims 4 also dropped the tuning when the SimData was present, even with
-  byte-identical layout to EA's reference.  Backed out in 057541c.  The C++
-  runtime SHOULD read `PerformanceStaticData.min_value`/`.max_value` from
-  the Commodity's SimData on the AS3 side — without it, the Career Panel
-  ProgressBar throws "Maximum cannot be equal to minimum" on expand.  That's
-  a deferred problem (open in lastUIException analysis); fixing the silent
-  career-add regression takes priority.
-
-  COMMODITY TUNABLES PROVIDED
-  ---------------------------
-  Per `statistics/commodity.pyc:Commodity.INSTANCE_TUNABLES`:
-    min_value_tuning              int    -100        min stat value
-    max_value_tuning              int    +100        max stat value
-    initial_tuning                tuple  (0, init=True)  starts at neutral
-    visible                       bool   False       not in motive panel
-                                                     (career panel reads it
-                                                     via different path)
-    remove_on_convergence         bool   False       persist while in career
-    _add_if_not_in_tracker        bool   True        auto-add when used
-    initial_as_default            bool   True        test default = 0
-    instance_if_not_default       bool   True        always instantiate
-                                                     (we don't decay so the
-                                                     "save space" optimization
-                                                     doesn't apply)
+  Matches every EA career performance stat.  Critical for our CareerLevel
+  scoring tunables (promote=100, demote=-80, fired=-95, warning=-50,
+  base_performance=8 per shift, +5 per goal, -35 missed work) to land at
+  sensible values rather than saturating immediately as the 0..5 range
+  did before commit aabcb30.
 -->
-<!-- i="statistic" intentional even though c="Commodity": EA's `Commodity` Python
-     class is registered under the same instance manager as Statistic (verified
-     in commodity.pyc: `manager=services.get_instance_manager(sims4.resources.Types.STATISTIC)`).
-     The `i=` attribute drives the DBPF resource type code -- `i="statistic"`
-     maps to 0x339BC5BD (TuningResourceType.Statistic), which Sims 4 routes to
-     the STATISTIC manager.  Using `i="commodity"` produces a different type
-     code (0x03B33DDF, observed in our build) that Sims 4 silently does NOT
-     route to STATISTIC, so the resource never registers and the
-     career_Adult_Historian fails to attach because its CareerLevel.performance_stat
-     reference resolves to None.  This was the root cause of the
-     "careers.add_career silently fails" symptom; verified by the
-     affordance_injector HC_* enumeration showing 3 stats (all EA auto-tracking,
-     none ours) when we shipped at i="commodity". -->
-<I c="Commodity" i="statistic" m="statistics.commodity" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
-  <T n="min_value_tuning">-100</T>
+<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_Statistic_HistorianLevel" s="99701">
+  <T n="initial_value">0</T>
   <T n="max_value_tuning">100</T>
-  <!-- initial_tuning is a TunableTuple. Commodity OVERRIDES Statistic's nested
-       sub-field names: Statistic uses `_initial_value`, Commodity uses `_value`.
-       Verified via tdesc.lot51.cc/Tuning/statistics-commodity.tdesc — Commodity's
-       initial_tuning sub-fields are _use_auto_satisfy_curve_as_initial_value,
-       _use_stat_value_on_init, _value (float, default 0.0), _value_range. -->
-  <U n="initial_tuning">
-    <T n="_value">0</T>
-    <T n="_use_stat_value_on_init">True</T>
-  </U>
-  <T n="visible">False</T>
-  <T n="remove_on_convergence">False</T>
-  <T n="_add_if_not_in_tracker">True</T>
-  <T n="initial_as_default">True</T>
-  <T n="instance_if_not_default">True</T>
+  <T n="min_value_tuning">-100</T>
 </I>
