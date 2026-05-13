@@ -228,6 +228,19 @@ const NEEDS_SIMDATA = new Set([
     // "Failed to locate category info for interaction category with key: …".
     // See Docs/NOTE_pie_menu_category_registration.md.
     "PieMenuCategory",
+    // NOTE: Statistic was added here briefly to fix the CareerPanel ProgressBar
+    // "Maximum cannot be equal to minimum" crash, on the theory that the C++
+    // runtime reads min/max from the Statistic SimData row. After landing it,
+    // the user's `careers.add_career career_Adult_Historian` started silently
+    // failing AND the Python instance manager's STATISTIC count dropped from
+    // 1157 → 1156 (HC_Statistic_HistorianLevel disappeared). Strong signal
+    // that our emitted Statistic SimData is malformed in a way Sims 4 rejects
+    // — taking the tuning XML down with it.  We back it out for now so the
+    // career can be added; the ProgressBar crash returns but isn't the
+    // blocker.  See lastException/lastUIException analysis on 2026-05-13 ~17:06.
+    // Re-enable once we have a known-good byte-equivalent dump against an EA
+    // Statistic SimData golden.
+    // "Statistic",
     // Statistic: when a Statistic is referenced as a CareerLevel
     // `performance_stat`, the C++ runtime walks the Statistic SimData to
     // assemble the in-game `PerformanceStaticData` consumed by the AS3
