@@ -241,15 +241,9 @@ const NEEDS_SIMDATA = new Set([
     // Re-enable once we have a known-good byte-equivalent dump against an EA
     // Statistic SimData golden.
     // "Statistic",
-    // Statistic: when a Statistic is referenced as a CareerLevel
-    // `performance_stat`, the C++ runtime walks the Statistic SimData to
-    // assemble the in-game `PerformanceStaticData` consumed by the AS3
-    // CareerPanel/PerformanceDetails ProgressBar.  Without a Statistic
-    // SimData row, min_value=max_value=0 and the panel throws
-    // "ProgressBar: Maximum cannot be equal to minimum" on expand.
-    // Verified by extracting EA's statistic_Career_Performance_Writer
-    // (instance 0x6c88) — see schemas.ts STATISTIC_SCHEMA.
-    "Statistic",
+    // NOTE: Statistic intentionally not in NEEDS_SIMDATA (see explanation
+    // 30 lines above).  We had it listed *twice* during the deep-investigation
+    // attempt; commenting out one occurrence wasn't enough.
 ]);
 
 // Locale name in strings.json → s4tk StringTableLocale enum value.
