@@ -14,3 +14,4 @@ Scripts/**/*.pyc
 # Research scratch (binary EA assets — do NOT commit)
 Build/_research_tmp/
 swf-extracts/
+Build/.pyc-build/
