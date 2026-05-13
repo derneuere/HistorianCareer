@@ -203,16 +203,34 @@
   </U>
 
   <!--
-    Company names — pool the runtime picks from on join. Empty list was the root
-    cause of the smoke-test Exception 2. German academic institutions, thematic.
+    Where Sims go to work. `career_location` is a TunableVariant; the default
+    variant is `company` (rabbit-hole, random company name picked from a list).
+
+    CRITICAL: this field MUST be wrapped in a <V n="career_location" t="company">
+    <U n="company">...</U></V> block per the TunableCareerLocationVariant TDESC
+    and Mod Constructor 5's TuneCompanyNames export pattern. The EA goldens we
+    extract via CombinedTuning show a *flattened* <L n="company_names"> at root,
+    but that's the serialization output — the source XML the runtime parses
+    needs the variant.
+
+    Without the variant wrapping, EA's TunableCareerLocationRandomCompany
+    constructor uses an EMPTY default list and crashes with
+    `IndexError: Cannot choose from an empty sequence` from
+    `careers/career_location.py` line 124 when a Sim joins the career.
+
+    German academic institutions, thematic.
   -->
-  <L n="company_names">
-    <T>0xTBD_STBL_KEY_HC_COMPANY_UNIVERSITAET_BERLIN</T>
-    <T>0xTBD_STBL_KEY_HC_COMPANY_PREUSSISCHER_KULTURBESITZ</T>
-    <T>0xTBD_STBL_KEY_HC_COMPANY_BUNDESARCHIV</T>
-    <T>0xTBD_STBL_KEY_HC_COMPANY_HUMBOLDT_INSTITUT</T>
-    <T>0xTBD_STBL_KEY_HC_COMPANY_LEIBNIZ_GESELLSCHAFT</T>
-  </L>
+  <V n="career_location" t="company">
+    <U n="company">
+      <L n="company_names">
+        <T>0xTBD_STBL_KEY_HC_COMPANY_UNIVERSITAET_BERLIN</T>
+        <T>0xTBD_STBL_KEY_HC_COMPANY_PREUSSISCHER_KULTURBESITZ</T>
+        <T>0xTBD_STBL_KEY_HC_COMPANY_BUNDESARCHIV</T>
+        <T>0xTBD_STBL_KEY_HC_COMPANY_HUMBOLDT_INSTITUT</T>
+        <T>0xTBD_STBL_KEY_HC_COMPANY_LEIBNIZ_GESELLSCHAFT</T>
+      </L>
+    </U>
+  </V>
 
   <T n="days_to_level_loss">2</T>
 
