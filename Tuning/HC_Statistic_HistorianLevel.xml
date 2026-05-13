@@ -77,7 +77,11 @@
   Layer A flow does NOT read this stat's value; only the UI panel does.
 -->
 <I c="Statistic" i="statistic" m="statistics.statistic" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
-  <T n="initial_value">0</T>
-  <T n="max_value_tuning">100</T>
   <T n="min_value_tuning">-100</T>
+  <T n="max_value_tuning">100</T>
+  <U n="initial_tuning">
+    <T n="_initial_value">0</T>
+    <T n="_use_stat_value_on_init">True</T>
+  </U>
+  <T n="persisted_tuning">True</T>
 </I>

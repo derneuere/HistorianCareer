@@ -204,13 +204,25 @@ async function buildPackage({ layerB }) {
 }
 
 // ----------------------------------------------------------------------------
-// Step 2: build the .ts4script (zip of raw .py files)
+// Step 2: build the .ts4script (zip of compiled .pyc files)
 //
-// Sims 4 ships CPython 3.7 with the full import system, and `zipimport`
-// accepts both `.py` and `.pyc` inside a .ts4script. We ship raw `.py` so
-// the build needs zero Python dependency — the game compiles on first
-// import (~10 ms × 3 files = negligible). Verified by inspecting EA's own
-// .ts4script files which contain a mix of .py and .pyc.
+// Originally (commit 46fe592) we shipped raw .py and relied on Sims 4's
+// runtime CPython 3.7 to compile on first import. That theoretically works
+// (zipimport accepts both .py and .pyc per PEP 273) but in practice, on
+// 1.124.55, our raw-.py packages silently fail to load: no entry in
+// lastException.txt, no `historiancareer_debug.log` write, no marker from
+// our `_hc_emit_loadtest_marker()` at the top of __init__.py — Sims 4's
+// import system simply doesn't reach our package. EA's own ts4scripts all
+// ship .pyc; matching their convention is what makes our package visible.
+//
+// We compile with Python 3.7 specifically (matches Sims 4's interpreter
+// version — .pyc bytecode magic numbers are version-locked, and Sims 4's
+// 3.7 will silently reject .pyc compiled with 3.10/3.11/3.12).
+//
+// If Python 3.7 isn't installed (no `py -3.7` and no `python3.7`), we fall
+// back to shipping raw .py with a loud warning. The user can install 3.7
+// from https://www.python.org/downloads/release/python-379/ — small,
+// fast, and the only thing the build needs Python for.
 // ----------------------------------------------------------------------------
 
 // CRC32 table (precomputed lazily, IEEE polynomial 0xEDB88320).
@@ -432,37 +444,142 @@ async function pythonSyntaxCheck(files) {
   }
 }
 
+/**
+ * Locate a Python 3.7 interpreter. Returns the spawn command + args prefix, or
+ * null if none found. On Windows, `py -3.7` is the launcher convention; on
+ * Linux/macOS, `python3.7` is the standard path. We require 3.7 specifically
+ * because Sims 4 ships 3.7 and .pyc bytecode magic is version-locked.
+ */
+async function findPython37() {
+  const useShell = process.platform === "win32";
+  const candidates = useShell
+    ? [{ cmd: "py", args: ["-3.7"] }, { cmd: "python3.7", args: [] }]
+    : [{ cmd: "python3.7", args: [] }, { cmd: "python3", args: [] }];
+  for (const c of candidates) {
+    try {
+      const versionOutput = await new Promise((resolve, reject) => {
+        const out = [];
+        const child = spawn(c.cmd, [...c.args, "-V"], { shell: useShell });
+        child.stdout.on("data", d => out.push(d));
+        child.stderr.on("data", d => out.push(d));
+        child.on("error", reject);
+        child.on("exit", code => code === 0 ? resolve(Buffer.concat(out).toString()) : reject(new Error(`exit ${code}`)));
+      });
+      if (/Python 3\.7\./.test(versionOutput)) return c;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+/**
+ * Compile a list of .py files to .pyc using Python 3.7's `py_compile`. Returns
+ * a list of { full, name } where `full` is the .pyc on disk and `name` is the
+ * POSIX-relative entry name (matching what the .py would have been, but with
+ * .pyc extension). On compile error, throws with the per-file diagnostics.
+ */
+async function compileToPyc(py37, files, outDir) {
+  await fs.mkdir(outDir, { recursive: true });
+  // Build a {source: dest} map and feed it to a small helper script that
+  // py_compile.compile()'s each one. Cleaner than spawning N processes.
+  const pairs = files.map(f => ({
+    src: f.full,
+    dst: path.join(outDir, f.name.replace(/\.py$/, ".pyc")),
+    name: f.name.replace(/\.py$/, ".pyc"),
+  }));
+  // Pre-mkdir the dst subdirs (collectScriptFiles preserves path structure).
+  for (const p of pairs) await fs.mkdir(path.dirname(p.dst), { recursive: true });
+
+  const helperPath = path.join(__dirname, ".pyc-compile-helper.py.tmp");
+  const helper = [
+    "import sys, py_compile",
+    "errs = []",
+    "for i in range(1, len(sys.argv), 2):",
+    "    src = sys.argv[i]",
+    "    dst = sys.argv[i+1]",
+    "    try:",
+    "        py_compile.compile(src, cfile=dst, doraise=True)",
+    "    except py_compile.PyCompileError as e:",
+    "        errs.append('{0}: {1}'.format(src, str(e).strip()))",
+    "    except Exception as e:",
+    "        errs.append('{0}: {1}: {2}'.format(src, type(e).__name__, e))",
+    "if errs:",
+    "    for e in errs: print(e)",
+    "    sys.exit(1)",
+    "",
+  ].join("\n");
+  await fs.writeFile(helperPath, helper, "utf8");
+
+  try {
+    await new Promise((resolve, reject) => {
+      const args = [...py37.args, helperPath];
+      for (const p of pairs) { args.push(p.src, p.dst); }
+      const stdoutChunks = [], stderrChunks = [];
+      const child = spawn(py37.cmd, args, { shell: process.platform === "win32" });
+      child.stdout.on("data", d => stdoutChunks.push(d));
+      child.stderr.on("data", d => stderrChunks.push(d));
+      child.on("error", reject);
+      child.on("exit", code => {
+        if (code === 0) return resolve();
+        const stdout = Buffer.concat(stdoutChunks).toString();
+        const stderr = Buffer.concat(stderrChunks).toString();
+        const lines = stdout.split(/\r?\n/).filter(Boolean);
+        reject(new Error(`Python 3.7 compile failed:\n${(lines.length ? lines : [stderr]).join("\n")}`));
+      });
+    });
+  } finally {
+    try { await fs.rm(helperPath); } catch { /* ignore */ }
+  }
+  return pairs.map(p => ({ full: p.dst, name: p.name }));
+}
+
 async function buildTs4Script() {
-  log(`==> Building ${path.relative(PROJECT_ROOT, TS4SCRIPT_OUT)} (raw .py, deflate-zipped)`);
+  log(`==> Building ${path.relative(PROJECT_ROOT, TS4SCRIPT_OUT)} (.pyc bytecode, deflate-zipped)`);
 
   if (!(await exists(SCRIPTS_DIR))) {
     throw new Error(`Scripts/ directory not found at ${SCRIPTS_DIR}`);
   }
-  const files = await collectScriptFiles(SCRIPTS_DIR);
-  if (files.length === 0) {
+  const sourceFiles = await collectScriptFiles(SCRIPTS_DIR);
+  if (sourceFiles.length === 0) {
     console.warn(C.yellow(`[warn] no .py files under ${SCRIPTS_DIR}; ts4script will be empty.`));
   }
 
-  // Gate the zip on a Python syntax check. We've shipped two builds with
-  // hidden Python errors that Sims 4's loader silently swallowed (nothing
-  // in lastException, nothing in Documents/Electronic Arts/Sims 4/);
-  // catching them BEFORE the zip is created costs ~50ms and prevents a
-  // ~5-minute debug cycle in-game.
-  const syntaxErrs = await pythonSyntaxCheck(files);
+  // Gate the zip on a Python syntax check (cheap, runs with any Python 3+).
+  // We've shipped builds with hidden errors that Sims 4 silently swallowed;
+  // catching them BEFORE the zip is created costs ~50ms.
+  const syntaxErrs = await pythonSyntaxCheck(sourceFiles);
   if (syntaxErrs.length > 0) {
     console.error(C.red(`[FAIL] Python syntax errors detected; refusing to build .ts4script:`));
     for (const e of syntaxErrs) console.error(C.red(`    ${e}`));
     throw new Error(`${syntaxErrs.length} Python syntax error(s) in Scripts/`);
   }
 
+  // Compile to .pyc using Python 3.7 (matches Sims 4's interpreter — .pyc
+  // magic numbers are version-locked and 3.7 will silently reject anything
+  // else). Falls back to raw .py with a loud warning if 3.7 isn't installed.
+  const py37 = await findPython37();
+  let zipFiles;
+  if (py37) {
+    log(`    compiling with Python 3.7 (${py37.cmd} ${py37.args.join(" ")})`, "gray");
+    const pycOutDir = path.join(__dirname, ".pyc-build");
+    // Wipe old .pyc dir so stale entries can't sneak into the zip.
+    try { await fs.rm(pycOutDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    zipFiles = await compileToPyc(py37, sourceFiles, pycOutDir);
+  } else {
+    console.warn(C.yellow(`[warn] Python 3.7 not found on PATH (looked for 'py -3.7', 'python3.7').`));
+    console.warn(C.yellow(`[warn] Falling back to raw .py — Sims 4 has been observed to silently`));
+    console.warn(C.yellow(`[warn] skip loading .ts4scripts that contain raw .py instead of .pyc.`));
+    console.warn(C.yellow(`[warn] Install 3.7 from https://www.python.org/downloads/release/python-379/`));
+    zipFiles = sourceFiles;
+  }
+
   // Atomic replace: write to a tmp path, then rename.
   const tmp = TS4SCRIPT_OUT + ".tmp";
   if (existsSync(tmp)) await fs.rm(tmp);
   if (existsSync(TS4SCRIPT_OUT)) await fs.rm(TS4SCRIPT_OUT);
-  const { entryCount, bytes } = await writeZip(tmp, files);
+  const { entryCount, bytes } = await writeZip(tmp, zipFiles);
   await fs.rename(tmp, TS4SCRIPT_OUT);
 
-  for (const f of files) console.log(C.gray(`    + ${f.name}`));
+  for (const f of zipFiles) console.log(C.gray(`    + ${f.name}`));
   log(`    ${entryCount} entr${entryCount === 1 ? "y" : "ies"}, ${bytes} bytes`, "gray");
 }
 
