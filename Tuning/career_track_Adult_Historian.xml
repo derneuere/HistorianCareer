@@ -33,7 +33,17 @@
     (every EA career track shares 0x6665077284098fa2) until we ship our own.
   -->
   <T n="icon" p="HistorianCareer\Career_Historian_Main.png">Career_Historian_Main.png</T>
-  <T n="icon_high_res" p="HistorianCareer\Career_Historian_hires.png">Career_Historian_hires.png</T>
+  <!--
+    icon_high_res: dead in the current Olympus UI. The string appears in
+    the data-class declaration but no AS3 code in any UI SWF reads
+    mTrackStaticData.icon_high_res. See Docs/NOTE_career_panel_icon_binding.md.
+    Point this at the same correct (transparent-bg) artwork as `icon` so
+    the column carries real art if EA ever wires a consumer for it.
+    A separate Career_Historian_hires.png file used to live in Build/icons/
+    but was byte-identical to Aspiration_HistorianCalling.png (placeholder
+    leftover with opaque white corners) — removed in this commit.
+  -->
+  <T n="icon_high_res" p="HistorianCareer\Career_Historian_Main.png">Career_Historian_Main.png</T>
   <!-- Universal track-background image; reuses EA's. -->
   <T n="image" p="InGame\UI\Icons\resource_icon_bkg.png">2f7d0004:00000000:6665077284098fa2</T>
   <!--
