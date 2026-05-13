@@ -281,12 +281,38 @@ def _inject_once():
         # classmethod. We share this hook because the affordance classes are
         # already resolved (`affordances` tuple) and the career/track managers
         # are guaranteed loaded by zone-spin-up time.
+        #
+        # NOTE: Not all Sims 4 instance managers honour `mgr.get(name)` for
+        # string keys — the DefinitionManager (OBJECT) is integer-only, and
+        # the first cut here found CAREER / CAREER_TRACK also returning None
+        # via .get() despite the tunings being loaded (visible in the
+        # diagnostic enumeration above). We use the same enumerate-and-match
+        # fallback that already works for affordance resolution: walk
+        # `mgr.types.values()` and match on `cls.__name__`.
         try:
             from historian_career.level_gate import install_level_gates
+
+            def _find_tuning_by_name(manager, name):
+                if manager is None:
+                    return None
+                try:
+                    cls = manager.get(name)
+                    if cls is not None:
+                        return cls
+                except (ValueError, TypeError):
+                    pass  # integer-only manager; fall through
+                try:
+                    for cls in manager.types.values():
+                        if getattr(cls, "__name__", None) == name:
+                            return cls
+                except Exception:
+                    pass
+                return None
+
             career_mgr = services.get_instance_manager(Types.CAREER) if services and Types else None
             track_mgr = services.get_instance_manager(Types.CAREER_TRACK) if services and Types else None
-            career_cls = career_mgr.get("career_Adult_Historian") if career_mgr is not None else None
-            track_cls = track_mgr.get("career_track_Adult_Historian") if track_mgr is not None else None
+            career_cls = _find_tuning_by_name(career_mgr, "career_Adult_Historian")
+            track_cls = _find_tuning_by_name(track_mgr, "career_track_Adult_Historian")
             if career_cls is None or track_cls is None:
                 _log(
                     "  Level gates SKIPPED: "
