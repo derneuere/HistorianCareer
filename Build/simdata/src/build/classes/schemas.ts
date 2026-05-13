@@ -345,6 +345,59 @@ export const BUFF_SCHEMA: TdescSchema = (() => {
 })();
 
 // ---------------------------------------------------------------------------
+// PieMenuCategory. Hand-authored (no TDESC fixture for this class) — the
+// Olympus UI registers PieMenuCategory entries by enumerating SimData
+// resources at boot; without the companion SimData our custom category fails
+// to register and the right-click pie menu silently aborts with
+//   "Failed to locate category info for interaction category with key: …".
+// See Docs/NOTE_pie_menu_category_registration.md for the full diagnosis.
+//
+// Schema is extracted from EA's `computer_Handiness.simdata` (and verified
+// against `computer_Programming`, `cheat_emotionintensity`, `computer_PlayGame`).
+// Hash 0x022065c1 — the runtime won't recognize the row without this exact
+// value, which can't be derived from the schema name alone (registered in
+// KNOWN_SCHEMA_HASHES below).
+//
+// The nested schemas (`mood_to_override_data`, `text_overrides`) are only
+// emitted if `mood_overrides` is non-empty; our HC tuning leaves the vector
+// empty, but the schemas must still be declared so the schema-cache produces
+// the right structure for any future use.
+// ---------------------------------------------------------------------------
+const PMC_TEXT_OVERRIDES: TdescType = {
+  kind: "object",
+  schemaName: "text_overrides",
+  columns: [
+    col("name_override", STRING_KEY),
+    col("tooltip", STRING_KEY),
+  ],
+};
+
+const PMC_MOOD_OVERRIDE_ROW: TdescType = {
+  kind: "object",
+  schemaName: "mood_to_override_data",
+  columns: [
+    col("mood", REF),
+    col("override_data", PMC_TEXT_OVERRIDES),
+  ],
+};
+
+export const PIE_MENU_CATEGORY_SCHEMA: TdescSchema = deepFreeze<TdescSchema>({
+  className: "PieMenuCategory",
+  classPath: "interactions.pie_menu_category.PieMenuCategory",
+  rootColumns: [
+    col("_collapsible",      { kind: "bool" },                                true),
+    col("_display_name",     STRING_KEY,                                      0),
+    col("_display_priority", { kind: "int32" },                               1),
+    col("_icon",             { kind: "resource-key" }),
+    col("_parent",           REF),
+    // SpecialPieMenuCategoryType.NO_CATEGORY = 0. Stored as UInt32 (matches
+    // EA's binary layout — verified in computer_Handiness.simdata).
+    col("_special_category", { kind: "uint32" },                              0),
+    col("mood_overrides",    { kind: "vector", elem: PMC_MOOD_OVERRIDE_ROW }, []),
+  ],
+});
+
+// ---------------------------------------------------------------------------
 // EA-canonical schema hashes. These are EA-internal layout checksums; we can't
 // regenerate them from TDESCs (see docs/tdesc-format.md). Extracted from the
 // real EA SimData goldens in `test/golden/` (1.124.55 game build).
@@ -362,6 +415,13 @@ export const KNOWN_SCHEMA_HASHES: Readonly<Record<string, number>> = Object.free
   AspirationCareer: 0x4e53725b,
   AspirationTrack: 0x54fdb5fc,
   Objective: 0xd5cfeba5,
+  // PieMenuCategory + nested schemas. The Olympus UI uses these exact hashes
+  // to identify the row at boot — without 0x022065c1 the row is silently
+  // ignored. Extracted from EA's computer_Handiness/computer_Programming
+  // SimData. See Docs/NOTE_pie_menu_category_registration.md.
+  PieMenuCategory: 0x022065c1,
+  mood_to_override_data: 0xeac32ff0,
+  text_overrides: 0x9c77ff5d,
   // Nested schema for AspirationTrack.aspirations (mapping key→value tuple).
   // EA extracts this from the live game; we can't derive it from a name hash.
   aspirations: 0xfb8c84bc,

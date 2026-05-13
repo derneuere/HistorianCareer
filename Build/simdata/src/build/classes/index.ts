@@ -19,6 +19,7 @@ import {
   CAREER_TRACK_SCHEMA,
   CAREER_SCHEMA,
   BUFF_SCHEMA,
+  PIE_MENU_CATEGORY_SCHEMA,
   KNOWN_SCHEMA_HASHES,
 } from "./schemas.js";
 
@@ -50,6 +51,10 @@ function registerAll(): void {
   registerClass({ className: "TunableCareerTrack", schema: CAREER_TRACK_SCHEMA });
   registerClass({ className: "Career", schema: CAREER_SCHEMA });
   registerClass({ className: "Buff", schema: BUFF_SCHEMA });
+  // PieMenuCategory needs a SimData companion or the Olympus UI silently
+  // refuses to register the category (issue #14 follow-up — see
+  // Docs/NOTE_pie_menu_category_registration.md).
+  registerClass({ className: "PieMenuCategory", schema: PIE_MENU_CATEGORY_SCHEMA });
 }
 
 /**

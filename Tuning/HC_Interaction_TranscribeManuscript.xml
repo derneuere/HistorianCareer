@@ -16,6 +16,17 @@
   the per-instance `category` field works.
 -->
 <I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_TranscribeManuscript" s="TBD_INSTANCE_ID">
+  <!--
+    Pie-menu submenu grouping (issue #14). References our PieMenuCategory
+    tuning by name; the build resolves it to a 31-bit decimal instance ID
+    via SMALL_ID_CLASSES → smallInstanceIdFor(). Previously reverted in
+    commit 6a663ba because the Olympus UI silently rejected the category
+    (no SimData companion to register it). Now restored — the build emits
+    a paired SimData for HC_PieMenuCategory_Historian via the
+    PIE_MENU_CATEGORY_SCHEMA in Build/simdata. See
+    Docs/NOTE_pie_menu_category_registration.md for the full rationale.
+  -->
+  <T n="category">HC_PieMenuCategory_Historian</T>
   <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_TRANSCRIBE_MANUSCRIPT</T>
   <L n="interaction_category_tags">
     <T>Interaction_Super</T>
