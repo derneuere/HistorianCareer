@@ -228,6 +228,15 @@ const NEEDS_SIMDATA = new Set([
     // "Failed to locate category info for interaction category with key: …".
     // See Docs/NOTE_pie_menu_category_registration.md.
     "PieMenuCategory",
+    // Statistic: when a Statistic is referenced as a CareerLevel
+    // `performance_stat`, the C++ runtime walks the Statistic SimData to
+    // assemble the in-game `PerformanceStaticData` consumed by the AS3
+    // CareerPanel/PerformanceDetails ProgressBar.  Without a Statistic
+    // SimData row, min_value=max_value=0 and the panel throws
+    // "ProgressBar: Maximum cannot be equal to minimum" on expand.
+    // Verified by extracting EA's statistic_Career_Performance_Writer
+    // (instance 0x6c88) — see schemas.ts STATISTIC_SCHEMA.
+    "Statistic",
 ]);
 
 // Locale name in strings.json → s4tk StringTableLocale enum value.
