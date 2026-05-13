@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- L4 â€” Juniorprofessor:in: "Habilitation Lecture". -->
 <I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_HabilitationLecture" s="TBD_INSTANCE_ID">
+  <!--
+    Pie-menu submenu grouping (issue #14). References our PieMenuCategory
+    tuning by name; the build resolves it to a 31-bit decimal instance ID
+    via SMALL_ID_CLASSES → smallInstanceIdFor() so EA's TunableReference
+    resolver accepts it. If the in-game pie menu silently fails to open
+    on right-click of a computer, this line is the first thing to remove
+    (paired with interaction_category_tags above) — see
+    Docs/NOTE_pie_menu_category_ids.md for the rollback rationale.
+  -->
+  <T n="category">HC_PieMenuCategory_Historian</T>
   <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_HABILITATION_LECTURE</T>
   <!-- See HC_Interaction_TranscribeManuscript.xml for the rationale on
        interaction_category_tags (issue #14 hypothesis 2). -->
