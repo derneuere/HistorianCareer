@@ -1,10 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  HC career-level statistic.
+
+  Dual-purpose: it both tracks Karrierestufe 0..5 for the Layer A pie-menu
+  promotion flow (see historian_career.py TIERS) AND is referenced as
+  `performance_stat` on every career_level_Adult_Historian_L*.xml, which drives
+  the per-shift performance bar in the expanded Career Panel
+  (PerformanceDetails.as in the Olympus UI).
+
+  Field names per EA's `statistics.statistic.Statistic` tunable schema.
+  Reference: Mod-Constructor-5 (MIT) — Constructor5.Elements/Statistics/
+  Statistic.cs and Constructor5/TuningActions/*.xml. The canonical EA names
+  are:
+    - min_value_tuning       (Int)        — lower bound
+    - max_value_tuning       (Int)        — upper bound
+    - initial_tuning         (Tuple)      — starting value:
+        ._initial_value      (Int)
+        ._use_stat_value_on_init (Bool)
+    - persisted_tuning       (Bool)       — saved with the sim
+
+  PREVIOUSLY (caused fix/career-progressbar-range bug; user-reported
+  lastUIException.txt 2026-05-13): this file used `min_value` / `max_value` /
+  `initial_value` / `stat_type` — none of which exist in EA's Statistic
+  schema. The Python tuning loader silently ignored every one of them and
+  the stat fell back to class-level defaults that leave min == max == 0.
+
+  When the Career Panel widget called
+
+    mcProgressBar.SetRange(performanceData.min_value,
+                           performanceData.max_value)
+
+  with min == max == 0, EA's olympus.gui.progressbars.ProgressBar.SetRange()
+  threw
+
+    Error: ProgressBar: Maximum cannot be equal to minimum
+        at olympus.gui.progressbars::ProgressBar/SetRange()
+        at widgets.Gameplay.SimInfoHUD.CareerPanel::PerformanceDetails/Draw()
+
+  and the panel refused to open after `careers.add_career career_Adult_Historian`.
+
+  The bar's `performanceData.min_value` / `.max_value` come from this stat
+  via the `performance_stat` reference on each CareerLevel — every L1..L5
+  level of `career_Adult_Historian` points here.
+
+  Range choice: kept 0..5 to preserve the existing Layer A semantics in
+  historian_career.TIERS (1->HiWi ... 5->Professor) and the
+  HC_Loot_Add_HistorianLevel_* loot actions. The bar saturating quickly at
+  +8 per shift / +5 per completed goal is a quality issue, not a crash,
+  and is a v0.2 polish item (split into a separate
+  per-shift performance Commodity with -100..+100 range, the EA-standard
+  shape).
+
+  Dropped from the previous shape (none were valid Statistic tunables):
+    - stat_type             (not a class tunable; class identity is `c=`)
+    - remove_on_convergence (Commodity-only; Statistic has no convergence)
+
+  Bare Statistic is the right class here: it has no decay/convergence and
+  no buff-state machine, both of which a per-tier counter explicitly does
+  not want.
+-->
 <I c="Statistic" i="statistic" m="statistics.statistic" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
-  <!-- Tracks Karrierestufe 0..5: 0 = no career yet, 1 = HiWi ... 5 = W3 Professor. -->
-  <T n="initial_value">0</T>
-  <T n="min_value">0</T>
-  <T n="max_value">5</T>
-  <T n="stat_type">COMMODITY</T>
-  <T n="remove_on_convergence">False</T>
+  <T n="min_value_tuning">0</T>
+  <T n="max_value_tuning">5</T>
+  <U n="initial_tuning">
+    <T n="_initial_value">0</T>
+    <T n="_use_stat_value_on_init">True</T>
+  </U>
   <T n="persisted_tuning">True</T>
 </I>
