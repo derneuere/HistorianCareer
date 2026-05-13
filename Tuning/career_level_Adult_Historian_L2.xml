@@ -9,6 +9,9 @@
   <T n="title_description">0xTBD_STBL_KEY_HC_LEVEL_2_DESC</T>
   <T n="simoleons_per_hour">70</T>
 
+  <!-- See L1 for rationale on ideal_mood; matches EA's Writer career convention. -->
+  <T n="ideal_mood">14641</T>
+
   <T n="performance_stat">HC_Statistic_HistorianLevel</T>
 
   <U n="performance_metrics">
