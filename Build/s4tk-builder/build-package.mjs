@@ -289,7 +289,13 @@ async function main() {
             iconNameToInstance.set(file, instance);
             iconEntries.push({
                 key: { type: DDS_TYPE, group: 0, instance },
-                value: RawResource.from(ddsBuf),
+                // Ship icon resources UNCOMPRESSED. @s4tk/models defaults to
+                // ZLIB-compressing every resource, which works for tuning XML
+                // and SimData (the game decompresses on read) but Sims 4's
+                // icon-loader path appears to read DDS resource bytes raw —
+                // a zlib-compressed icon shows as the default placeholder.
+                // defaultCompressionType=0 = CompressionType.Uncompressed.
+                value: RawResource.from(ddsBuf, { defaultCompressionType: 0 }),
             });
             console.log(
                 `  + icon ${file.padEnd(46)} type=DDS(BGRA8888)        ` +
