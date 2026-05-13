@@ -59,9 +59,28 @@ const ICONS_DIR = path.join(__dirname, "..", "icons");
 const OUT_DIR = path.join(__dirname, "..", "out");
 const OUT_PACKAGE = path.join(OUT_DIR, "HistorianCareer_Tuning.package");
 
-// PNG image resource type. Sims 4 uses this for career icons, aspiration icons,
-// trait icons, and any other tuning that carries a <T n="icon"> reference.
-const PNG_TYPE = 0x2F7D0004;
+// PNG image resource type for embedded image resources.
+//
+// IMPORTANT: there are TWO image-related type codes in Sims 4. They are NOT
+// interchangeable:
+//
+//   0x00B2D882  "PNG image"        — the type ACTUAL stored image resources
+//                                    live at. SimData ResourceKey columns
+//                                    for icon/icon_high_res/image point at
+//                                    this type.
+//   0x2F7D0004  "TGI icon ref"     — a marker type used in Tuning XML as the
+//                                    "type" segment of <T n="icon">…</T>
+//                                    resource keys. The SimData generator
+//                                    rewrites 0x2F7D0004 → 0x00B2D882 when
+//                                    serializing ResourceKey cells.
+//
+// We embed icon PNGs at 0x00B2D882. The Tuning XML can still reference them
+// with the 0x2F7D0004 marker — the simdata rewrite makes the lookup land on
+// our 0x00B2D882 resource at the same instance.
+//
+// Verified by inspecting an EA-shipped CareerTrack SimData (Writer_Track1,
+// instance 0x7508): icon column has type=0xB2D882.
+const PNG_TYPE = 0x00B2D882;
 
 // CLI flag --include-layer-b includes the resources that require SimData companions.
 // Layer A is the drop-in default; the package is loadable as-is.

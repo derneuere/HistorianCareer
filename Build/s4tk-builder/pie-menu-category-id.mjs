@@ -47,11 +47,52 @@ export const PIE_MENU_CATEGORY_ID_MASK = 0x7FFFFFFFn;
 
 /**
  * Tuning class names that should receive a small (31-bit) instance ID instead
- * of the default 64-bit fnv64 hash. Currently just PieMenuCategory. If future
- * EA-extracted evidence shows other tuning classes need narrow IDs we add them
- * here.
+ * of the default 64-bit fnv64 hash.
+ *
+ * Rationale per class family:
+ *
+ * - PieMenuCategory (issue #14): EA's <T n="category"> TunableReference field
+ *   silently rejects 64-bit values. EA-shipped category IDs are 16–32 bit.
+ *
+ * - Career / TunableCareerTrack / CareerLevel / Aspiration / AspirationTrack /
+ *   AspirationCareer / Objective: Surfaced when our HC career was visibly
+ *   added but its display strings/icons rendered as "@" / default-icon. EA's
+ *   own careers ship with 16-bit instance IDs (Writer = 27933, GradeSchool
+ *   Track = 12900). Mod-author library lot51-core ships a runtime patch
+ *   (custom_filter_career_fix.py) that explicitly removes 64-bit career IDs
+ *   from EA's sim-filter system with the comment "A 64 bit career was
+ *   removed". Without that patch installed, 64-bit Career/CareerTrack IDs
+ *   silently fail the same way `category` did for PieMenuCategory: the
+ *   tuning loads, cross-refs to other resources work, but downstream
+ *   systems (UI display lookups against the SimData LocalizationKey columns,
+ *   icon resolver, CAS aspiration enumerator) drop 64-bit references.
+ *
+ *   Switching the whole career family to 31-bit IDs sidesteps the bug, the
+ *   same way it did for PieMenuCategory. Cross-references all resolve through
+ *   the global name→instance map in resolve-names.mjs, so emitting both ends
+ *   of a reference as 31-bit keeps everything consistent.
  */
-export const SMALL_ID_CLASSES = new Set(["PieMenuCategory"]);
+export const SMALL_ID_CLASSES = new Set([
+    "PieMenuCategory",
+    "Career",
+    "TunableCareerTrack",
+    "CareerTrack",
+    "CareerLevel",
+    "Aspiration",
+    "AspirationTrack",
+    "AspirationCareer",
+    "Objective",
+    // Trait IDs in EA are all 16-bit (e.g. trait_Knowledge_BookWorm ≈ 27082,
+    // Renaissance Sim's primary_trait = 27086). Our Habilitation Renown trait
+    // is referenced from AspirationTrack.provided_traits — if that reference
+    // is 64-bit it gets silently dropped by the same code path that filtered
+    // 64-bit careers, blocking the whole track's CAS registration.
+    "Trait",
+    // Statistic IDs in EA are also 16-bit (e.g. Writer's career performance
+    // stat = 27784, ranging up to ~100K). Our HC_Statistic_HistorianLevel is
+    // referenced from CareerLevel.performance_stat — needs to be 31-bit.
+    "Statistic",
+]);
 
 /**
  * Deterministically derive a ≤ 2^31 - 1 instance ID from a tuning name.

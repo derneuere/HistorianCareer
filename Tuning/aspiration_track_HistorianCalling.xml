@@ -80,6 +80,18 @@
     <E n="urgency">DEFAULT</E>
   </U>
   <!--
+    primary_trait is the CAS personality trait associated with this aspiration
+    track — shown in the Sim's trait panel while the track is active. For adult
+    Knowledge-category tracks this appears to be REQUIRED for CAS visibility
+    (Track_Knowledge_A/Renaissance Sim sets it to 27086; child track
+    Track_Motor doesn't, but child-aspiration registration goes through a
+    different code path). 27086 is the EA-shipped Knowledge category primary
+    trait — borrowing it as a stand-in until we author a Historian-specific
+    CAS trait.
+  -->
+  <T n="primary_trait">27086</T>
+
+  <!--
     Reward trait granted while this track is the Sim's primary aspiration. -->
   <L n="provided_traits">
     <T>trait_HabilitationRenown</T>

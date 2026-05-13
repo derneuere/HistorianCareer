@@ -76,9 +76,29 @@ test("assertNoCollisions throws on duplicate IDs", () => {
     );
 });
 
-test("SMALL_ID_CLASSES currently lists exactly PieMenuCategory", () => {
+test("SMALL_ID_CLASSES covers PieMenuCategory and the career/aspiration family", () => {
+    // PieMenuCategory — original case (issue #14): EA's <T n="category"> field
+    // is a TunableReference constrained to <= 2^31.
     assert.ok(SMALL_ID_CLASSES.has("PieMenuCategory"));
-    assert.equal(SMALL_ID_CLASSES.size, 1);
+    // Career family — surfaced when in-game testing showed Career/CareerTrack
+    // display strings rendering as "@" / default-icon. lot51-core's
+    // custom_filter_career_fix.py confirms 64-bit career IDs are silently
+    // dropped by EA's sim-filter system. EA's own careers ship with 16-bit
+    // instance IDs (e.g. Writer = 27933, GradeSchool track = 12900).
+    for (const name of [
+        "Career",
+        "TunableCareerTrack",
+        "CareerTrack",
+        "CareerLevel",
+        "Aspiration",
+        "AspirationTrack",
+        "AspirationCareer",
+        "Objective",
+        "Trait",
+        "Statistic",
+    ]) {
+        assert.ok(SMALL_ID_CLASSES.has(name), `SMALL_ID_CLASSES missing ${name}`);
+    }
 });
 
 let passed = 0;

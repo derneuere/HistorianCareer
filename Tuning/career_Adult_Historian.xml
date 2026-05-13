@@ -41,21 +41,35 @@
   <T n="career_affordance">29941</T>
 
   <!--
-    Career availability tests:
-      1. trait whitelist: only Sims who graduated with the History major can be hired.
-      2. age list: adult-only career.
-    Both must pass.
+    Career availability tests.
+
+    TEMPORARILY relaxed: only the age check is enforced (YA/A/E) so the career
+    sticks in-game. The trait whitelist
+        trait_University_Major_History_Completed
+    is a documented PLACEHOLDER (issue #2) — the real EA trait name from the
+    Discover University EP has never been confirmed against the live game.
+    When `careers.add_career` is used, EA's tuning loader runs the placeholder
+    trait lookup, gets a null reference, and the periodic availability check
+    then evicts the Sim from the career within a frame ("Mirco hat keinen
+    Job." appears immediately after the join-notification popup).
+
+    TODO (issue #2 follow-up): once the canonical trait name is confirmed via
+    S4S Game File Cruiser, re-add the trait whitelist block:
+
+      <L>
+        <V t="trait">
+          <U n="trait">
+            <L n="whitelist_traits">
+              <T>trait_University_Major_History_Completed</T>
+            </L>
+          </U>
+        </V>
+      </L>
+
+    The Scripts/historian_career/historian_career.py safety net already lists
+    candidate trait names; we just haven't picked one yet.
   -->
   <L n="career_availablity_tests">
-    <L>
-      <V t="trait">
-        <U n="trait">
-          <L n="whitelist_traits">
-            <T>trait_University_Major_History_Completed</T>
-          </L>
-        </U>
-      </V>
-    </L>
     <L>
       <V t="sim_info">
         <U n="sim_info">

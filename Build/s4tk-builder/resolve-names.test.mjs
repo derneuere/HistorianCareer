@@ -274,7 +274,9 @@ test("integration: collect then resolve across multiple files", () => {
   const map = collectTuningNames(xmls);
   assert.equal(map.size, 3);
 
-  const statId = fnv64("HC_Statistic_HistorianLevel", true).toString();
+  // Statistic is in SMALL_ID_CLASSES (31-bit IDs); the collector uses the
+  // small-ID helper instead of fnv64 for that class.
+  const statId = smallInstanceIdFor("HC_Statistic_HistorianLevel").toString();
   const lootId = fnv64("HC_Loot_Add_HistorianLevel_Small", true).toString();
 
   const lootXml = xmls[0][1];
