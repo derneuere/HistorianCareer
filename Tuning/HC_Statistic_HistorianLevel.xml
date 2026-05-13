@@ -1,87 +1,91 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  HC career-level statistic. Drives the per-shift Performance bar in the
-  expanded Career Panel (PerformanceDetails.as in the Olympus UI).
+  HC career-performance commodity. Drives the per-shift Performance bar in
+  the expanded Career Panel (PerformanceDetails.as in the Olympus UI) and
+  the promotion/demotion/firing thresholds in EA's CareerLevel logic.
 
-  HOW IT WIRES UP TO THE UI
-  -------------------------
-  Every career_level_Adult_Historian_L*.xml references this stat as
-  `performance_stat`. The Olympus AS3 panel renders the bar like:
+  CLASS: Commodity, NOT bare Statistic
+  ------------------------------------
+  EA's `CareerLevel.performance_stat` field is documented (in
+  `simulation.zip:careers/career_tuning.pyc:CareerLevel.INSTANCE_TUNABLES`) as:
 
-      this.mcProgressBar.SetRange(performanceData.min_value,
-                                  performanceData.max_value);
-      this.mcProgressBar.SetValue(_loc3_.performance);
+      'performance_stat': sims4.tuning.tunable.TunableReference(
+          services.get_instance_manager(sims4.resources.Types.STATISTIC),
+          description="Commodity used to track career performance for this level.",
+          export_modes=ExportModes.All,
+          tuning_group=GroupNames.SCORING),
 
-  (PerformanceDetails.as:93-94). `performanceData` is a
-  `PerformanceStaticData` object whose `.min_value` / `.max_value` are
-  populated by the C++ runtime from the Statistic SimData binary referenced
-  via `performance_stat` — NOT from the runtime CareerLevel tuning.
+  The TunableReference's manager is STATISTIC (which holds both Statistic
+  and Commodity classes since Commodity extends Statistic — see
+  `statistics/commodity.pyc:class Commodity(TunedContinuousStatistic, ..., manager=STATISTIC)`),
+  but the description says "Commodity".  The CareerLevel runtime references
+  the commodity-specific interface — convergence, distress thresholds,
+  off-lot simulation flags, `_add_if_not_in_tracker` etc.  A bare Statistic
+  is accepted at the TunableReference layer but Sims 4 1.124.55 silently
+  REJECTS THE WHOLE RESOURCE when it doesn't pass the Commodity validation
+  expected by the consumer.  Verified empirically: 0..5 Statistic registered
+  fine (1157 STATISTIC manager count) but -100..+100 Statistic dropped it
+  (1156 count) — because the negative-min only makes sense as a Commodity.
 
-  CANONICAL FIELD NAMES (Statistic.INSTANCE_TUNABLES)
-  ---------------------------------------------------
-  Confirmed by reading `statistic.pyc` from The Sims 4 1.124.55:
+  RANGE -100..+100
+  ----------------
+  Matches every adult-career performance commodity EA ships (Writer,
+  Entertainer, Criminal, Culinary, …).  Critical for our existing
+  Career-level scoring tunables, which the previous 0..5 range silently
+  disabled:
 
-      class Statistic.INSTANCE_TUNABLES = (
-          'initial_tuning', 'stat_asm_param',
-          'min_value_tuning', 'max_value_tuning',
-          'stat_name', 'icon',
-          'persisted_tuning', 'gallery_load_behavior',
-          'apply_value_to_object_cost',
-      )
+      promote_performance_level=100.0   (EA default; reached at max perf)
+      demotion_performance_level=-80.0  (EA default; demoted if you sink)
+      fired_performance_level=-95.0     (EA default; fired if you tank)
+      career_performance_warning.threshold.value=-50  (HC tuning;
+                                                       warn at half-tank)
+      performance_metrics.base_performance=8           (per shift)
+      performance_per_completed_goal=5                 (per completed task)
+      missed_work_penalty=35                           (skipping work)
 
-  EA's own adult-career performance stats (e.g. statistic_Career_Performance_Writer
-  s="27784", extracted from SimulationFullBuild0.package) use the shape:
+  At 0..5 a single completed task saturated the bar; at -100..+100 each
+  shift moves the bar ~10-20 points, completing a daily-task line takes
+  ~2 weeks, promotion is realistic, and the demotion/firing thresholds
+  finally fire.
 
-      [I c=Statistic i=statistic m=statistics.statistic ...]
-        [T n=initial_value]0[/T]            (deprecated shortcut name)
-        [T n=max_value_tuning]100[/T]
-        [T n=min_value_tuning]-100[/T]
-      [/I]
+  WHY NOT EMIT A SimData COMPANION
+  --------------------------------
+  Tried in commit aabcb30 (schema hash 0x8273c673, 3 cols max/min/stat_name).
+  Sims 4 also dropped the tuning when the SimData was present, even with
+  byte-identical layout to EA's reference.  Backed out in 057541c.  The C++
+  runtime SHOULD read `PerformanceStaticData.min_value`/`.max_value` from
+  the Commodity's SimData on the AS3 side — without it, the Career Panel
+  ProgressBar throws "Maximum cannot be equal to minimum" on expand.  That's
+  a deferred problem (open in lastUIException analysis); fixing the silent
+  career-add regression takes priority.
 
-  EA uses the (deprecated but still accepted) shortcut `initial_value` rather
-  than the modern `[U n=initial_tuning][T n=_initial_value]...[/T][/U]`
-  form. Both shapes are valid in 1.124; we match EA's shape verbatim.
-
-  (Bracket-form above intentional — the s4tk-builder root-tag parser greps for
-  the first instance-tag in the file, so an EA-shape example inside this
-  comment would shadow the real root tag below.)
-
-  THE BUG THE TWO PREVIOUS AGENTS MISSED
-  --------------------------------------
-  All the tunable field names were fixed in commit d7428a8 (issue/22), and
-  the names ARE correct, BUT THE PACKAGE DID NOT EMIT A SIMDATA COMPANION
-  FOR THIS RESOURCE.  EA's runtime reads `performance_stat -> Statistic
-  SimData -> min_value_tuning / max_value_tuning` to assemble
-  PerformanceStaticData.  With no Statistic SimData in our package, the C++
-  shim constructs PerformanceStaticData with min==max==0 and the bar
-  throws:
-
-      Error: ProgressBar: Maximum cannot be equal to minimum
-          at olympus.gui.progressbars::ProgressBar/SetRange()
-          at widgets.Gameplay.SimInfoHUD.CareerPanel::PerformanceDetails/Draw()
-          ...
-
-  Layer B now generates a Statistic SimData (3-column row, schema hash
-  0x8273c673 — see Build/simdata/src/build/classes/schemas.ts) so the C++
-  runtime gets a real min_value_tuning / max_value_tuning pair.
-
-  RANGE CHOICE: -100..+100, matching EVERY EA Career Performance stat
-  (Writer, Entertainer, Criminal, Culinary, …).  The 0..5 range used
-  pre-d7428a8 was wrong even with a working SimData: each shift contributes
-  base_performance=8, missed_work_penalty=35, performance_per_completed_goal=5
-  — these tunables saturate a 0..5 range on the first action.
-
-  The 0..5 Karrierestufe counter that historian_career.py.TIERS tracks for
-  the Layer A pie-menu flow is a separate concern handled by the L1..L5 loot
-  actions (HC_Loot_Add_HistorianLevel_*.xml — those add fixed amounts).  The
-  Layer A flow does NOT read this stat's value; only the UI panel does.
+  COMMODITY TUNABLES PROVIDED
+  ---------------------------
+  Per `statistics/commodity.pyc:Commodity.INSTANCE_TUNABLES`:
+    min_value_tuning              int    -100        min stat value
+    max_value_tuning              int    +100        max stat value
+    initial_tuning                tuple  (0, init=True)  starts at neutral
+    visible                       bool   False       not in motive panel
+                                                     (career panel reads it
+                                                     via different path)
+    remove_on_convergence         bool   False       persist while in career
+    _add_if_not_in_tracker        bool   True        auto-add when used
+    initial_as_default            bool   True        test default = 0
+    instance_if_not_default       bool   True        always instantiate
+                                                     (we don't decay so the
+                                                     "save space" optimization
+                                                     doesn't apply)
 -->
-<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
+<I c="Commodity" i="commodity" m="statistics.commodity" n="HC_Statistic_HistorianLevel" s="TBD_INSTANCE_ID">
   <T n="min_value_tuning">-100</T>
   <T n="max_value_tuning">100</T>
   <U n="initial_tuning">
     <T n="_initial_value">0</T>
     <T n="_use_stat_value_on_init">True</T>
   </U>
-  <T n="persisted_tuning">True</T>
+  <T n="visible">False</T>
+  <T n="remove_on_convergence">False</T>
+  <T n="_add_if_not_in_tracker">True</T>
+  <T n="initial_as_default">True</T>
+  <T n="instance_if_not_default">True</T>
 </I>
