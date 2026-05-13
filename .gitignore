@@ -10,3 +10,7 @@ Scripts/**/*.pyc
 # Editor noise
 .vscode/
 *.swp
+
+# Research scratch (binary EA assets — do NOT commit)
+Build/_research_tmp/
+swf-extracts/
