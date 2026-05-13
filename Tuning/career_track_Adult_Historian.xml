@@ -19,4 +19,26 @@
     <T>career_level_Adult_Historian_L4</T>
     <T>career_level_Adult_Historian_L5</T>
   </L>
+  <!--
+    Career UI icons. The build embeds matching PNG files from Build/icons/ as
+    resources of type 0x2F7D0004 (Sims 4 image type). The bare filename below
+    is rewritten by the builder to the full TGI resource key at emit time —
+    see step 4 of build-package.mjs.
+
+    Without these the career panel cannot render — the career is registered
+    but invisible in the Sim's UI. EA's Writer_Track3_Journalist (which we
+    studied for shape) carries the same trio.
+
+    `image` is the track-background. We reuse EA's universal background
+    (every EA career track shares 0x6665077284098fa2) until we ship our own.
+  -->
+  <T n="icon" p="HistorianCareer\Career_Historian_Main.png">Career_Historian_Main.png</T>
+  <T n="icon_high_res" p="HistorianCareer\Career_Historian_hires.png">Career_Historian_hires.png</T>
+  <!-- Universal track-background image; reuses EA's. -->
+  <T n="image" p="InGame\UI\Icons\resource_icon_bkg.png">2f7d0004:00000000:6665077284098fa2</T>
+  <!--
+    The "click to busy" preview tooltip key. We reuse EA's Writer Journalist
+    tooltip (0x77D1D57E) — generic enough not to mention Writer explicitly.
+  -->
+  <T n="busy_time_situation_picker_tooltip">0x77D1D57E</T>
 </I>

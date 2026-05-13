@@ -58,10 +58,11 @@
   <T n="description_text">0xTBD_STBL_KEY_HC_ASPTRACK_DESC</T>
   <T n="display_text">0xTBD_STBL_KEY_HC_ASPTRACK_NAME</T>
   <!--
-    Icon: Track_Knowledge_A ("Renaissance Sim") icon, thematically close to a
-    History/scholarship aspiration. Swap to a custom .png once we ship one.
+    Custom icon. The build embeds Build/icons/Aspiration_HistorianCalling.png
+    as a 0x2F7D0004 resource; the bare filename below is rewritten to the full
+    TGI at emit time by build-package.mjs step 4.
   -->
-  <T n="icon" p="InGame\UI\Icons\CAS\Aspirations\Aspiration_Knowledge1.png">2f7d0004:00000000:70f4f2b9947509f5</T>
+  <T n="icon" p="HistorianCareer\Aspiration_HistorianCalling.png">Aspiration_HistorianCalling.png</T>
   <U n="notification">
     <V n="text" t="single">
       <T n="single">0xTBD_STBL_KEY_HC_ASPTRACK_COMPLETE_BODY</T>

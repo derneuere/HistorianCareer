@@ -55,8 +55,13 @@ import { collectTuningNames, resolveNamesInXml } from "./resolve-names.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const TUNING_DIR = path.join(PROJECT_ROOT, "Tuning");
+const ICONS_DIR = path.join(__dirname, "..", "icons");
 const OUT_DIR = path.join(__dirname, "..", "out");
 const OUT_PACKAGE = path.join(OUT_DIR, "HistorianCareer_Tuning.package");
+
+// PNG image resource type. Sims 4 uses this for career icons, aspiration icons,
+// trait icons, and any other tuning that carries a <T n="icon"> reference.
+const PNG_TYPE = 0x2F7D0004;
 
 // CLI flag --include-layer-b includes the resources that require SimData companions.
 // Layer A is the drop-in default; the package is loadable as-is.
@@ -107,6 +112,38 @@ async function main() {
     }
 
     console.log(`[builder] ${keyNames.length} STBL keys across ${localeNames.length} locale(s): ${localeNames.join(", ")}`);
+
+    // -----------------------------------------------------------------------
+    // 1b. Embed custom PNG icons from Build/icons/.
+    //
+    // For each .png in that folder, the build registers a resource of type
+    // 0x2F7D0004 (Sims 4's PNG image type) with instance = fnv64(basename, true).
+    // It also adds an entry to nameToInstance so tuning XML files can reference
+    // the icon by its bare filename, e.g.
+    //     <T n="icon" p="...">Career_Historian_Main.png</T>
+    // The Pass 2 name resolver swaps this for the resource key the game looks up.
+    // The XML emit format Sims 4 expects for an icon ref is:
+    //     <T n="icon" p="path/for/preview.png">2f7d0004:00000000:{16 hex}</T>
+    // So we also rewrite the inner text to that full TGI form after resolving.
+    // -----------------------------------------------------------------------
+    /** @type {Map<string, bigint>} iconFilename → 64-bit resource instance */
+    const iconNameToInstance = new Map();
+    const iconEntries = []; // Buffered until we add to the package below.
+    if (await fs.access(ICONS_DIR).then(() => true).catch(() => false)) {
+        const iconFiles = (await fs.readdir(ICONS_DIR))
+            .filter(f => f.toLowerCase().endsWith(".png"));
+        for (const file of iconFiles) {
+            const buf = await fs.readFile(path.join(ICONS_DIR, file));
+            const instance = fnv64(file, true);
+            iconNameToInstance.set(file, instance);
+            iconEntries.push({
+                key: { type: PNG_TYPE, group: 0, instance },
+                value: RawResource.from(buf),
+            });
+            console.log(`  + icon ${file.padEnd(46)} type=PNG                  instance=0x${instance.toString(16)} (${buf.byteLength}B)`);
+        }
+        console.log(`[builder] embedded ${iconFiles.length} icon PNG(s) from Build/icons/`);
+    }
 
     // -----------------------------------------------------------------------
     // 2-3. Walk Tuning/*.xml, build XmlResource entries.
@@ -203,6 +240,24 @@ async function main() {
                 console.warn(`[warn] ${w}`);
                 nameResolverWarnings++;
             }
+        }
+
+        // 4) Custom icon refs → resource keys.
+        //    Source XML can reference a custom icon by bare filename:
+        //        <T n="icon" p="...">Career_Historian_Main.png</T>
+        //    Rewrite that to the full TGI Sims 4 expects:
+        //        <T n="icon" p="...">2f7d0004:00000000:{16 hex of fnv64(filename)}</T>
+        //    Matches both `<T n="icon">` and `<T n="icon_high_res">` / `<T n="image">`.
+        if (iconNameToInstance.size > 0) {
+            xml = xml.replace(
+                /(<T(?:\s+n="(?:icon|icon_high_res|image)")?(?:\s+p="[^"]*")?>)([A-Za-z0-9_\-]+\.png)(<\/T>)/g,
+                (match, open, body, close) => {
+                    const inst = iconNameToInstance.get(body);
+                    if (inst === undefined) return match; // unknown PNG name; leave as-is
+                    const tgi = `2f7d0004:00000000:${inst.toString(16).padStart(16, "0")}`;
+                    return `${open}${tgi}${close}`;
+                },
+            );
         }
 
         // Warn if any placeholder slipped through.
@@ -305,6 +360,13 @@ async function main() {
             value: stbl,
         });
         console.log(`  + STBL.${localeName.padEnd(8)}                                  type=StringTable          instance=0x${stblInstance.toString(16)} (${keyNames.length} entries)`);
+    }
+
+    // -----------------------------------------------------------------------
+    // 4b. Add the icon PNG resources buffered during step 1b.
+    // -----------------------------------------------------------------------
+    for (const iconEntry of iconEntries) {
+        entries.push(iconEntry);
     }
 
     // -----------------------------------------------------------------------
