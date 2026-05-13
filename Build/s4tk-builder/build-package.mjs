@@ -99,6 +99,12 @@ const NEEDS_SIMDATA = new Set([
     "Career", "CareerTrack", "TunableCareerTrack", "CareerLevel",
     "Aspiration", "AspirationTrack", "AspirationCareer",
     "Trait", "Objective", "CareerChanceCard",
+    // PieMenuCategory: the Olympus UI builds its category registry from
+    // SimData resources at boot, NOT from the tuning XML. Without this
+    // companion the right-click pie menu silently fails with
+    // "Failed to locate category info for interaction category with key: …".
+    // See Docs/NOTE_pie_menu_category_registration.md.
+    "PieMenuCategory",
 ]);
 
 // Locale name in strings.json → s4tk StringTableLocale enum value.
