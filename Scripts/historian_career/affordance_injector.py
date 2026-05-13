@@ -274,6 +274,34 @@ def _inject_once():
             injected_into += 1
 
         _log(f"Injected {len(affordances)} affordances into {injected_into} computer objects.")
+
+        # Issue #26 — per-Sim career-level gating. The XML test_globals path
+        # silently failed (commit bc530fd / revert 05bff8a), so the gate lives
+        # in level_gate.py and patches each HC_Interaction_*'s `_test`
+        # classmethod. We share this hook because the affordance classes are
+        # already resolved (`affordances` tuple) and the career/track managers
+        # are guaranteed loaded by zone-spin-up time.
+        try:
+            from historian_career.level_gate import install_level_gates
+            career_mgr = services.get_instance_manager(Types.CAREER) if services and Types else None
+            track_mgr = services.get_instance_manager(Types.CAREER_TRACK) if services and Types else None
+            career_cls = career_mgr.get("career_Adult_Historian") if career_mgr is not None else None
+            track_cls = track_mgr.get("career_track_Adult_Historian") if track_mgr is not None else None
+            if career_cls is None or track_cls is None:
+                _log(
+                    "  Level gates SKIPPED: "
+                    f"career_cls={career_cls!r} track_cls={track_cls!r} "
+                    "— affordances remain ungated for this session."
+                )
+            else:
+                affordance_by_name = {
+                    getattr(a, "__name__", None): a for a in affordances
+                }
+                n = install_level_gates(affordance_by_name, career_cls, track_cls, log=_log)
+                _log(f"  Level gates installed on {n} HC_Interaction_* classes.")
+        except Exception as e:
+            _log(f"  Level-gate install error: {e}\n{traceback.format_exc()}")
+
         _injected = True
     except Exception as e:
         _log(f"Injection error: {e}\n{traceback.format_exc()}")
