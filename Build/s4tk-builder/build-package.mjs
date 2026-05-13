@@ -36,10 +36,22 @@ import { Package, XmlResource, StringTableResource, RawResource } from "@s4tk/mo
 import { StringTableLocale, TuningResourceType, BinaryResourceType } from "@s4tk/models/enums.js";
 import { fnv32, fnv64 } from "@s4tk/hashing/hashing.js";
 import { formatAsHexString } from "@s4tk/hashing/formatting.js";
-// @s4tk/images: PNG → DDS BC3 encoder (DXT5 + mipmap chain). Resolved
-// transitively via @s4tk/models, but listed explicitly in package.json so
-// the dependency is visible and pinned. See issue #18.
+// @s4tk/images: PNG → DDS BC3 encoder. Resolved transitively via
+// @s4tk/models, but listed explicitly in package.json so the dependency is
+// visible and pinned. See issue #18.
+//
+// We also use Jimp directly (transitively available via @s4tk/images) to
+// resize PNG inputs to EA-typical icon sizes BEFORE encoding to DDS. EA's
+// career/aspiration icons are predominantly 128×128 with NO mipmap chain
+// (verified via ClientFullBuild0 enumeration: 61/200 sampled DDS icons are
+// 128×128/1mip; 0/200 are 1024×1024). Shipping a 1024×1024 + 9 mips DDS
+// causes Sims 4's icon renderer to fall back to default placeholder — the
+// renderer appears to cap mod icon sizes.
 import { DdsImage } from "@s4tk/images";
+import jimpCustom from "@jimp/custom";
+import jimpPng from "@jimp/png";
+import jimpResize from "@jimp/plugin-resize";
+const Jimp = jimpCustom({ types: [jimpPng], plugins: [jimpResize] });
 
 // simdata: our hand-rolled SimData generator that replaces the last S4S step.
 // Built from ../simdata. Loaded from its compiled output under ./dist.
@@ -206,10 +218,18 @@ async function main() {
             .filter(f => f.toLowerCase().endsWith(".png"));
         for (const file of iconFiles) {
             const pngBuf = await fs.readFile(path.join(ICONS_DIR, file));
-            // PNG → DDS BC3 (DXT5) with mipmaps. Defaults: maxMipMaps=15
-            // (i.e. full chain down to 1×1), shuffle=false (DXT5, not DST5).
-            // The library resizes non-power-of-2 inputs internally.
-            const dds = await DdsImage.fromImageAsync(pngBuf);
+
+            // Resize PNG to EA-typical icon dimensions BEFORE DDS encoding.
+            // *_hires.png → 256×256 (largest size seen in EA's sample of 200).
+            // Everything else → 128×128 (the dominant size — 61/200 EA icons).
+            // Bilinear resize (RESIZE_BILINEAR = "bilinearInterpolation") is the
+            // best speed/quality tradeoff for icon downscaling.
+            const targetSize = /_hires\.png$/i.test(file) ? 256 : 128;
+            const image = await Jimp.read(pngBuf);
+            image.resize(targetSize, targetSize, Jimp.RESIZE_BILINEAR);
+            // PNG → DDS BC3 (DXT5), explicitly single-mip to match EA's icons.
+            // maxMipMaps=1 means just the top-level texture (no mipmap chain).
+            const dds = await DdsImage.fromJimpAsync(image, { maxMipMaps: 1 });
             const ddsBuf = dds.buffer;
             const instance = fnv64(file, true);
             iconNameToInstance.set(file, instance);
@@ -220,7 +240,7 @@ async function main() {
             console.log(
                 `  + icon ${file.padEnd(46)} type=DDS(DXT5)            ` +
                 `instance=0x${instance.toString(16)} ` +
-                `(PNG ${pngBuf.byteLength}B → DDS ${ddsBuf.byteLength}B, ${dds.header.width}×${dds.header.height}, ${dds.header.mipCount} mips)`,
+                `(PNG ${pngBuf.byteLength}B → DDS ${ddsBuf.byteLength}B, ${dds.header.width}×${dds.header.height}, ${dds.header.mipCount} mip)`,
             );
         }
         console.log(`[builder] embedded ${iconFiles.length} icon(s) as DDS BC3 from Build/icons/`);
