@@ -28,6 +28,36 @@
   -->
   <T n="category">HC_PieMenuCategory_Historian</T>
   <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_TRANSCRIBE_MANUSCRIPT</T>
+  <!--
+    test_globals: gate the affordance on the actor being in the Historian
+    career track at level >= 1 (issue #26 — Option A). Empirically this is
+    "must be in this career at all", since user_level=1 is the lowest valid
+    level. Shape mirrors EA's TunableCareerTest: subjects defaults to Actor,
+    test_type is a TunableVariant whose `career_track` arm requires both a
+    track reference and a TunableInterval(int, default_lower=1,
+    default_upper=10) under user_level. Test_globals entries are ANDed; if
+    any fails, the affordance is dropped from the pie menu, which is also
+    the path that re-evaluates on level-up so promotions unlock new
+    interactions without restarting (acceptance criterion 4). Informative
+    "requires level X" tooltips would need a TunableTestSetWithTooltip
+    wrapper or per-affordance pie_menu_unavailable_tooltip — deferred.
+  -->
+  <L n="test_globals">
+    <V t="career_test">
+      <U n="career_test">
+        <V n="test_type" t="career_track">
+          <U n="career_track">
+            <T n="career_track">career_track_Adult_Historian</T>
+            <V n="user_level" t="enabled">
+              <U n="enabled">
+                <T n="lower_bound">1</T>
+              </U>
+            </V>
+          </U>
+        </V>
+      </U>
+    </V>
+  </L>
   <L n="interaction_category_tags">
     <T>Interaction_Super</T>
     <T>Interaction_All</T>
