@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   L3 daily tasks: Postdoc.
-  See aspiration_career_Historian_L1.xml for notes on display fields.
+  See aspiration_career_Historian_L1.xml for notes on display fields and on
+  the aspiration_valid_age_type field (closes issue #22).
 -->
 <I c="AspirationCareer" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_career_Historian_L3" s="TBD_INSTANCE_ID">
+  <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
   <L n="objectives">
     <T>objective_HC_RunPresentAtSymposium</T>
     <T>objective_HC_RunAnalyzePrimarySource</T>
