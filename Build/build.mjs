@@ -305,6 +305,97 @@ async function writeZip(outPath, files) {
   return { entryCount, bytes: out.length };
 }
 
+/**
+ * Catch the most common stale-cache-defeating bug: shipping a .ts4script that
+ * fails to compile inside the game. Sims 4 silently swallows SyntaxError /
+ * IndentationError / TabError during package import (it just logs to console,
+ * which most players can't see). We've now lost two debug cycles to this; if
+ * we can detect it at build time, do.
+ *
+ * We invoke Python 3 (any 3.7+) to `compile()` each .py file. If `python3` /
+ * `py` / `python` isn't on PATH (rare on modern Win/Mac/Linux dev boxes) we
+ * SKIP rather than fail — the build is still useful, the user just doesn't
+ * get the static safety net.
+ *
+ * `compile(source, filename, "exec")` raises SyntaxError on any of the three
+ * structural-error types. Returns a list of {file, error} on failure, [] on
+ * success.
+ */
+async function pythonSyntaxCheck(files) {
+  // Find a python interpreter on PATH. Prefer python3 (Mac/Linux convention)
+  // → py -3 (Win launcher) → python (anywhere). We probe with `-V` and a
+  // shell, since on Windows `py.exe` is on PATH but locating it via
+  // child_process.spawn without a shell needs `.exe`.  Both probe and run
+  // use the same shell setting to avoid path-resolution mismatches.
+  const useShell = process.platform === "win32";
+  const candidates = useShell
+    ? ["py", "python3", "python"]
+    : ["python3", "python"];
+  let chosen = null;
+  for (const c of candidates) {
+    try {
+      await new Promise((resolve, reject) => {
+        const probeArgs = c === "py" ? ["-3", "-V"] : ["-V"];
+        const child = spawn(c, probeArgs, { shell: useShell });
+        child.on("error", reject);
+        child.on("exit", code => code === 0 ? resolve() : reject(new Error(`exit ${code}`)));
+      });
+      chosen = c;
+      break;
+    } catch { /* try next */ }
+  }
+  if (!chosen) {
+    log("    skipping Python syntax check (no python3 on PATH)", "gray");
+    return [];
+  }
+
+  // Embed-checking via `-c` is annoying cross-platform: on Windows with
+  // `shell: true`, the shell reparses the argument and our embedded newlines
+  // break. Workaround: write the checker as a small .py file alongside
+  // build.mjs and invoke it normally.
+  const checkerPath = path.join(__dirname, "..py-syntax-check.py.tmp");
+  const checker = [
+    "import sys, ast",
+    "errs = []",
+    "for p in sys.argv[1:]:",
+    "    try:",
+    "        with open(p, 'rb') as f:",
+    "            src = f.read()",
+    "        ast.parse(src, filename=p)",
+    "    except SyntaxError as e:",
+    "        errs.append('{0}:{1}:{2}: {3}: {4}'.format(p, e.lineno, e.offset, type(e).__name__, e.msg))",
+    "    except Exception as e:",
+    "        errs.append('{0}: {1}: {2}'.format(p, type(e).__name__, e))",
+    "if errs:",
+    "    for e in errs: print(e)",
+    "    sys.exit(1)",
+    "",
+  ].join("\n");
+  await fs.writeFile(checkerPath, checker, "utf8");
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const args = chosen === "py" ? ["-3", checkerPath] : [checkerPath];
+      for (const f of files) args.push(f.full);
+      const stderrChunks = [];
+      const stdoutChunks = [];
+      const child = spawn(chosen, args, { shell: useShell });
+      child.stdout.on("data", d => stdoutChunks.push(d));
+      child.stderr.on("data", d => stderrChunks.push(d));
+      child.on("error", reject);
+      child.on("exit", code => {
+        const stdout = Buffer.concat(stdoutChunks).toString();
+        const stderr = Buffer.concat(stderrChunks).toString();
+        if (code === 0) return resolve([]);
+        const lines = stdout.split(/\r?\n/).filter(Boolean);
+        resolve(lines.length ? lines : [stderr || `python exited ${code}`]);
+      });
+    });
+  } finally {
+    try { await fs.rm(checkerPath); } catch { /* ignore */ }
+  }
+}
+
 async function buildTs4Script() {
   log(`==> Building ${path.relative(PROJECT_ROOT, TS4SCRIPT_OUT)} (raw .py, deflate-zipped)`);
 
@@ -314,6 +405,18 @@ async function buildTs4Script() {
   const files = await collectScriptFiles(SCRIPTS_DIR);
   if (files.length === 0) {
     console.warn(C.yellow(`[warn] no .py files under ${SCRIPTS_DIR}; ts4script will be empty.`));
+  }
+
+  // Gate the zip on a Python syntax check. We've shipped two builds with
+  // hidden Python errors that Sims 4's loader silently swallowed (nothing
+  // in lastException, nothing in Documents/Electronic Arts/Sims 4/);
+  // catching them BEFORE the zip is created costs ~50ms and prevents a
+  // ~5-minute debug cycle in-game.
+  const syntaxErrs = await pythonSyntaxCheck(files);
+  if (syntaxErrs.length > 0) {
+    console.error(C.red(`[FAIL] Python syntax errors detected; refusing to build .ts4script:`));
+    for (const e of syntaxErrs) console.error(C.red(`    ${e}`));
+    throw new Error(`${syntaxErrs.length} Python syntax error(s) in Scripts/`);
   }
 
   // Atomic replace: write to a tmp path, then rename.

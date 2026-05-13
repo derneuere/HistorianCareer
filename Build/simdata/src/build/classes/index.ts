@@ -20,6 +20,7 @@ import {
   CAREER_SCHEMA,
   BUFF_SCHEMA,
   PIE_MENU_CATEGORY_SCHEMA,
+  STATISTIC_SCHEMA,
   KNOWN_SCHEMA_HASHES,
 } from "./schemas.js";
 
@@ -55,6 +56,11 @@ function registerAll(): void {
   // refuses to register the category (issue #14 follow-up — see
   // Docs/NOTE_pie_menu_category_registration.md).
   registerClass({ className: "PieMenuCategory", schema: PIE_MENU_CATEGORY_SCHEMA });
+  // Statistic needs a SimData companion when it's referenced as a CareerLevel
+  // `performance_stat` — without it the Olympus Career Panel ProgressBar
+  // throws "Maximum cannot be equal to minimum" on expand (see
+  // PerformanceDetails.as:93 / CareerInfo.performanceData).
+  registerClass({ className: "Statistic", schema: STATISTIC_SCHEMA });
 }
 
 /**
