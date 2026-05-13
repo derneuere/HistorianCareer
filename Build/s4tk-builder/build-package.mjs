@@ -36,22 +36,76 @@ import { Package, XmlResource, StringTableResource, RawResource } from "@s4tk/mo
 import { StringTableLocale, TuningResourceType, BinaryResourceType } from "@s4tk/models/enums.js";
 import { fnv32, fnv64 } from "@s4tk/hashing/hashing.js";
 import { formatAsHexString } from "@s4tk/hashing/formatting.js";
-// @s4tk/images: PNG → DDS BC3 encoder. Resolved transitively via
-// @s4tk/models, but listed explicitly in package.json so the dependency is
-// visible and pinned. See issue #18.
+// Icon encoding: PNG → DDS, uncompressed RGBA8888.
 //
-// We also use Jimp directly (transitively available via @s4tk/images) to
-// resize PNG inputs to EA-typical icon sizes BEFORE encoding to DDS. EA's
-// career/aspiration icons are predominantly 128×128 with NO mipmap chain
-// (verified via ClientFullBuild0 enumeration: 61/200 sampled DDS icons are
-// 128×128/1mip; 0/200 are 1024×1024). Shipping a 1024×1024 + 9 mips DDS
-// causes Sims 4's icon renderer to fall back to default placeholder — the
-// renderer appears to cap mod icon sizes.
-import { DdsImage } from "@s4tk/images";
+// EA's career/aspiration icons (type 0x00B2D882) are NOT DXT-compressed:
+// they are uncompressed BGRA8888 stored in a DDS wrapper. Verified against
+// EA's Writer career icon (instance 0x17b131133381dd3d, found in
+// Data/Client/ClientFullBuild7.package): pf.flags=0x41 (DDPF_RGB+ALPHA),
+// pf.fourCC=(empty), pf.bits=32, dims=50×50, mipcount=1. DXT5 icons fail
+// the renderer's load step and fall back to default placeholder.
+//
+// @s4tk/images only supports DXT5/DST5, so we write the DDS ourselves
+// (small, ~30 lines). Jimp (transitively from @s4tk/images deps) handles
+// PNG decode + resize.
 import jimpCustom from "@jimp/custom";
 import jimpPng from "@jimp/png";
 import jimpResize from "@jimp/plugin-resize";
 const Jimp = jimpCustom({ types: [jimpPng], plugins: [jimpResize] });
+
+/**
+ * Encode a Jimp image as an uncompressed BGRA8888 DDS file matching EA's
+ * career-icon byte layout. EA's renderer accepts BGRA pixel order with
+ * standard 32-bpp RGBA-with-alpha pixel-format flags.
+ *
+ * Returns a Buffer of size 128 + width*height*4.
+ */
+function encodeDdsBgra8888(image) {
+  const width = image.bitmap.width;
+  const height = image.bitmap.height;
+  const pitch = width * 4; // 4 bytes per pixel
+  const dataSize = width * height * 4;
+  const out = Buffer.alloc(128 + dataSize);
+
+  // --- DDS header (124 bytes after the 4-byte magic) ---
+  out.write("DDS ", 0, 4, "ascii");
+  out.writeUInt32LE(124, 4);                            // dwSize
+  // flags: DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PITCH | DDSD_PIXELFORMAT
+  out.writeUInt32LE(0x0000100F, 8);
+  out.writeUInt32LE(height, 12);
+  out.writeUInt32LE(width, 16);
+  out.writeUInt32LE(pitch, 20);                         // dwPitchOrLinearSize
+  out.writeUInt32LE(0, 24);                             // dwDepth
+  out.writeUInt32LE(1, 28);                             // dwMipMapCount (1, no chain)
+  // dwReserved1[11] — zero
+  // DDS_PIXELFORMAT at offset 76 (32 bytes)
+  out.writeUInt32LE(32, 76);                            // pf.dwSize
+  out.writeUInt32LE(0x00000041, 80);                    // pf.dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS
+  out.writeUInt32LE(0, 84);                             // pf.dwFourCC (empty for uncompressed)
+  out.writeUInt32LE(32, 88);                            // pf.dwRGBBitCount
+  // BGRA byte order in memory → masks (little-endian DWORD reads of a BGRA
+  // 4-byte pixel give 0xAARRGGBB layout). Matches EA's icon binary.
+  out.writeUInt32LE(0x00FF0000, 92);                    // dwRBitMask  (red is third byte)
+  out.writeUInt32LE(0x0000FF00, 96);                    // dwGBitMask
+  out.writeUInt32LE(0x000000FF, 100);                   // dwBBitMask
+  out.writeUInt32LE(0xFF000000, 104);                   // dwABitMask
+  // DDS_CAPS2 at offset 108
+  out.writeUInt32LE(0x00001000, 108);                   // dwCaps = DDSCAPS_TEXTURE only
+  // dwCaps2/3/4 + dwReserved2 — zero
+
+  // --- pixel data ---
+  // Jimp stores pixels as RGBA in row-major order; DDS BGRA8888 expects
+  // each pixel as B, G, R, A bytes. Swap channels at copy time.
+  const src = image.bitmap.data;
+  const dst = out.subarray(128);
+  for (let i = 0; i < src.length; i += 4) {
+    dst[i + 0] = src[i + 2]; // B  ← R
+    dst[i + 1] = src[i + 1]; // G  ← G
+    dst[i + 2] = src[i + 0]; // R  ← B
+    dst[i + 3] = src[i + 3]; // A  ← A
+  }
+  return out;
+}
 
 // simdata: our hand-rolled SimData generator that replaces the last S4S step.
 // Built from ../simdata. Loaded from its compiled output under ./dist.
@@ -221,16 +275,16 @@ async function main() {
 
             // Resize PNG to EA-typical icon dimensions BEFORE DDS encoding.
             // *_hires.png → 256×256 (largest size seen in EA's sample of 200).
-            // Everything else → 128×128 (the dominant size — 61/200 EA icons).
-            // Bilinear resize (RESIZE_BILINEAR = "bilinearInterpolation") is the
-            // best speed/quality tradeoff for icon downscaling.
+            // Everything else → 128×128 (matches the dominant 61/200 in EA's
+            // ClientFullBuild0 sample; EA's actual career icons can be even
+            // smaller — Writer's main icon is 50×50). 128×128 is safe.
             const targetSize = /_hires\.png$/i.test(file) ? 256 : 128;
             const image = await Jimp.read(pngBuf);
             image.resize(targetSize, targetSize, Jimp.RESIZE_BILINEAR);
-            // PNG → DDS BC3 (DXT5), explicitly single-mip to match EA's icons.
-            // maxMipMaps=1 means just the top-level texture (no mipmap chain).
-            const dds = await DdsImage.fromJimpAsync(image, { maxMipMaps: 1 });
-            const ddsBuf = dds.buffer;
+            // Encode as uncompressed BGRA8888 DDS (EA's career-icon format).
+            // NOT DXT5 — Sims 4's career-icon renderer rejects compressed DDS
+            // at type 0x00B2D882 (verified against EA's Writer icon header).
+            const ddsBuf = encodeDdsBgra8888(image);
             const instance = fnv64(file, true);
             iconNameToInstance.set(file, instance);
             iconEntries.push({
@@ -238,9 +292,9 @@ async function main() {
                 value: RawResource.from(ddsBuf),
             });
             console.log(
-                `  + icon ${file.padEnd(46)} type=DDS(DXT5)            ` +
+                `  + icon ${file.padEnd(46)} type=DDS(BGRA8888)        ` +
                 `instance=0x${instance.toString(16)} ` +
-                `(PNG ${pngBuf.byteLength}B → DDS ${ddsBuf.byteLength}B, ${dds.header.width}×${dds.header.height}, ${dds.header.mipCount} mip)`,
+                `(PNG ${pngBuf.byteLength}B → DDS ${ddsBuf.byteLength}B, ${targetSize}×${targetSize}, 1 mip)`,
             );
         }
         console.log(`[builder] embedded ${iconFiles.length} icon(s) as DDS BC3 from Build/icons/`);
