@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node build-package.mjs",
     "deploy": "node ../build.mjs",
-    "test": "node resolve-names.test.mjs && node pie-menu-category-id.test.mjs && node validate-enums.test.mjs"
+    "test": "node resolve-names.test.mjs && node pie-menu-category-id.test.mjs && node validate-enums.test.mjs && node validate-simdata.test.mjs"
   },
   "dependencies": {
     "@s4tk/hashing": "^0.2.1",
