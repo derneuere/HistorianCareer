@@ -53,7 +53,7 @@
   sensible values rather than saturating immediately as the 0..5 range
   did before commit aabcb30.
 -->
-<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_Statistic_HistorianLevel" s="99701">
+<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_PerformanceStat_Historian" s="99700">
   <T n="initial_value">0</T>
   <T n="max_value_tuning">100</T>
   <T n="min_value_tuning">-100</T>

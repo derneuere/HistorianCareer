@@ -9,7 +9,7 @@
       <U n="statistics">
         <L n="operations">
           <U>
-            <T n="statistic">HC_Statistic_HistorianLevel</T>
+            <T n="statistic">HC_PerformanceStat_Historian</T>
             <U n="advertise_and_modify">
               <T n="amount">2</T>
               <T n="subject">Actor</T>
