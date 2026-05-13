@@ -25,7 +25,7 @@
 
 import { deepFreeze } from "../../tdesc/types.js";
 import type { TdescColumn, TdescSchema, TdescType } from "../../tdesc/types.js";
-import { loadTdescFixture, selectColumns, withAdditionalColumns } from "./loadSchema.js";
+import { loadTdescFixture, selectColumns, selectNestedColumns, withAdditionalColumns } from "./loadSchema.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — concise column constructors used by the small hand-authored schemas
@@ -195,6 +195,19 @@ export const CAREER_CHANCE_CARD_SCHEMA: TdescSchema = deepFreeze<TdescSchema>({
 //
 // The current TDESC marks `agents_available`, `pay_type`, `pto_per_day`
 // persisted but the golden doesn't have them — newer-game additions.
+//
+// Nested-schema curation (fix #16): EA's binary persists a SMALLER set of
+// columns in `TunableScheduleEntry` than the current TDESC declares. The
+// TDESC has 7 fields per schedule entry; EA's runtime expects only 4
+// (`days_available, duration, random_start, start_time`). When the extra
+// fields are present in our binary the parser reads bytes at the wrong
+// offsets, currentCareerLevel returns null, and Olympus crashes. Drop:
+//   - `multi_day_career_days_at_work`  OptionalTunable<TunableAvailableDays>
+//   - `multi_day_career_start_and_end_days`  OptionalTunable<{start_day,end_day}>
+//   - `schedule_shift_type`  TunableEnumEntry<CareerShiftType>
+// Dropping `multi_day_career_start_and_end_days` also removes the only
+// reference to the anonymous "enabled" tuple schema, so that schema falls out
+// of `ctx.schemaCache.values()` and isn't emitted.
 // ---------------------------------------------------------------------------
 const CAREER_LEVEL_BASE_COLUMNS = [
   "aspiration",
@@ -223,10 +236,26 @@ const CAREER_LEVEL_EXTRA_COLUMNS: readonly TdescColumn[] = Object.freeze([
   },
 ]);
 
+// EA's TunableScheduleEntry has exactly these 4 columns, in this alphabetical
+// order (EA sorts schema columns by name when emitting). Confirmed by
+// extracting career_SecretAgent_Villain_Level3 in the live game.
+const TUNABLE_SCHEDULE_ENTRY_EA_COLUMNS = [
+  "days_available",
+  "duration",
+  "random_start",
+  "start_time",
+] as const;
+
 export const CAREER_LEVEL_SCHEMA: TdescSchema = (() => {
   const tdesc = loadTdescFixture("CareerLevel.tdesc.json");
   const base = selectColumns(tdesc, CAREER_LEVEL_BASE_COLUMNS);
-  return withAdditionalColumns(base, CAREER_LEVEL_EXTRA_COLUMNS);
+  const withExtras = withAdditionalColumns(base, CAREER_LEVEL_EXTRA_COLUMNS);
+  // Curate the nested TunableScheduleEntry to match EA's actual binary.
+  return selectNestedColumns(
+    withExtras,
+    "TunableScheduleEntry",
+    TUNABLE_SCHEDULE_ENTRY_EA_COLUMNS,
+  );
 })();
 
 // ---------------------------------------------------------------------------
@@ -336,6 +365,17 @@ export const KNOWN_SCHEMA_HASHES: Readonly<Record<string, number>> = Object.free
   // Nested schema for AspirationTrack.aspirations (mapping key→value tuple).
   // EA extracts this from the live game; we can't derive it from a name hash.
   aspirations: 0xfb8c84bc,
+  // CareerLevel.work_schedule nested schemas. EA's schema hashes for these
+  // appear to be derived from the schema's binary layout (column names+types
+  // hashed together) rather than just FNV32(name) — empirically the simple
+  // name hash does NOT reproduce them. Extracted from the live game's
+  // career_SecretAgent_Villain_Level3 SimData golden. Without these, the
+  // CareerInfo runtime parser computes wrong byte offsets and
+  // currentCareerLevel returns null (issue #16 / Olympus crash).
+  TunableWeeklySchedule: 0xc897ddb0,
+  TunableScheduleEntry: 0x6b21f952,
+  TunableAvailableDays: 0x5bcfcd54,
+  TunableTimeOfDay: 0x1bd2886e,
 });
 
 // ---------------------------------------------------------------------------
