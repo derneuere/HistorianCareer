@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Tier 4: "Hold a Lehrstuhl (W3)." Final tier — awards the reward trait. -->
 <!-- aspiration_valid_age_type set to TEEN_OR_OLDER per issue #13 follow-up — YAE_ONLY was not a real enum member (see T1 for rationale). -->
-<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T4" s="TBD_INSTANCE_ID">
+<!-- s=40655 (0x9ECF): hand-picked 16-bit ID. See aspiration_track_HistorianCalling.xml for issue-#23 AS3-crash saga. -->
+<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T4" s="40655">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T4_NAME</T>
   <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T4_DESC</T>
   <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>

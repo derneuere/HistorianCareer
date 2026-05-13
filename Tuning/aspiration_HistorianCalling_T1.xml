@@ -19,7 +19,8 @@
   EA's adult-themed Renaissance Sim aspiration). See
   Docs/NOTE_aspiration_track_registration.md for the full trace.
 -->
-<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T1" s="TBD_INSTANCE_ID">
+<!-- s=40652 (0x9ECC): hand-picked 16-bit ID. See aspiration_track_HistorianCalling.xml for the issue-#23 AS3-crash saga. -->
+<I c="Aspiration" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_HistorianCalling_T1" s="40652">
   <T n="display_name">0xTBD_STBL_KEY_HC_ASP_T1_NAME</T>
   <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T1_DESC</T>
   <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>

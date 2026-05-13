@@ -4,57 +4,74 @@
   the expanded Career Panel and the promote/demote/fire thresholds in EA's
   CareerLevel logic.
 
-  SHAPE: copied verbatim from EA's statistic_Career_Performance_Writer
-  --------------------------------------------------------------------
-  Extracted from `Data/Simulation/SimulationFullBuild0.package` via
-  `Build/_research_tmp/extract-writer-ref.mjs` (gitignored). EA's full
-  file is exactly:
+  SHAPE
+  -----
+  Canonical Statistic TDESC (statistics/statistic.pyc INSTANCE_TUNABLES,
+  cross-checked against Build/simdata/test/fixtures/tdescs/Statistic.tdesc.json
+  and Constructor 5's Statistic.cs). Accepted tunables:
 
-      [I c=Statistic i=statistic m=statistics.statistic n=statistic_Career_Performance_Writer s=27784]
-        [T n=initial_value]0[/T]
-        [T n=max_value_tuning]100[/T]
-        [T n=min_value_tuning]-100[/T]
-      [/I]
+      initial_tuning           TunableTuple (_initial_value, _use_stat_value_on_init, _value_range)
+      max_value_tuning         int
+      min_value_tuning         int
+      apply_value_to_object_cost, gallery_load_behavior, icon, min_lod_value,
+      persisted_tuning, respect_lod_on_add, stat_asm_param, stat_name, telemetry
 
-  Three tunables, class=Statistic (NOT Commodity — verified against EA's
-  shipped tunings: every adult-career performance stat in the writer-ref
-  extract is class=Statistic with this exact 3-field shape).  `initial_value`
-  is a deprecated shortcut for `initial_tuning._initial_value` and IS
-  accepted by Sims 4 1.124.55's tuning loader.
+  `_use_stat_value_on_init` is set True per the TDESC requirement:
+  "If unchecked, we error if any initial values are tuned as they imply
+   that we want to use them."
 
-  WHY NOT EXPLICIT `initial_tuning` TUPLE
-  ---------------------------------------
-  The structured form `[U n=initial_tuning][T n=_initial_value]0[/T][/U]`
-  is also valid but our earlier attempts at that shape failed to register
-  with our 31-bit instance ID.  Matching EA's shape exactly removes one
-  variable from the debugging space.
+  ISSUE #23 SAGA (this fix saved 4+ debug cycles, archived for posterity)
+  ----------------------------------------------------------------------
+  This resource was silently rejected by Sims 4 1.124.55's tuning loader
+  across five separate fixes before we found the actual cause:
 
-  17-BIT INSTANCE ID (s=99701)
+    1. `s="..."` 31-bit ID via smallInstanceIdFor — failed. We hypothesised
+       the lot51-core "64-bit career truncation" bug applied to Statistic IDs.
+    2. Hardcoded `s="99701"` then `s="99700"` — both failed. EA happens to
+       have Max_RocketScience (Objective) at s=99700 and SC_Max_ItsNotBrainSurgery
+       (Snippet) at s=99701; we suspected cross-type collisions.
+    3. Hardcoded `s="109226"` (0x1AAAA, verified free across all 20518 EA
+       CombinedTuning resources) — STILL failed. Ruled out collisions.
+    4. Switched bare `<T n="initial_value">0</T>` to canonical
+       `<U n="initial_tuning">...</U>` tuple — STILL failed. Ruled out shape.
+    5. Empirical probe: shipped 3 control statistics (probeA same content,
+       probeB minimal, probeC with "Historian" in name) alongside the broken
+       one. All 3 probes registered; only the original kept failing. The one
+       remaining difference: the original carried a 2898-byte XML comment
+       block with em-dashes (U+2014). Stripping the comment fixed it.
+
+  Resolution: Sims 4 1.124.55's tuning XML parser silently rejects a tuning
+  resource whose source XML carries a multi-KB comment block, especially one
+  containing Unicode characters. Failure mode: not registered into the type
+  manager, no entry in lastException, no diagnostic anywhere — completely
+  indistinguishable from an ID collision until you isolate the comment.
+
+  Build-time mitigation: Build/s4tk-builder/build-package.mjs now strips all
+  XML comments at load time, so source files can carry as much documentation
+  as we want. THIS comment ships as zero bytes in the .package. The strip is
+  the FIRST step after readFile, before any Pass-1 indexing — so the regex
+  scans in resolve-names.mjs and the root-element parser never see comment
+  content either.
+
+  INSTANCE ID 109226 (0x1AAAA)
   ----------------------------
-  EA's career-performance statistics live at s=27784 (Writer), s=27783
-  (TechGuru), s=16662 (generic base) — all 16/17-bit.  lot51-core's
-  `patches/custom_filter_career_fix.py` shows EA's runtime has a known
-  bug that drops 64-bit instance IDs from career-related dicts; the same
-  truncation may apply silently to Statistic IDs.  Our 31-bit ID
-  (0x3F16A005, from smallInstanceIdFor) was working for every other HC
-  tuning but the affordance_injector diagnostic shows HC_Statistic_*
-  NEVER appearing in Types.STATISTIC.  Force a 17-bit ID in the EA range
-  to remove that variable too.
-
-  Specifically: 99701 = 0x18575, comfortably above EA's used range
-  (16662..27784 for performance stats; ~70000 max for any EA stat per
-  the SMALL_ID hints in pie-menu-category-id.mjs) and 17-bit clean.
+  Verified clear of EA's 20518-tuning index across all types. We could
+  alternatively drop the literal s= and let smallInstanceIdFor compute a
+  31-bit hash, but the hand-picked value keeps cross-references stable
+  if we ever need to debug them in lastException output.
 
   RANGE -100..+100
   ----------------
-  Matches every EA career performance stat.  Critical for our CareerLevel
+  Matches every EA career performance stat. Critical for the CareerLevel
   scoring tunables (promote=100, demote=-80, fired=-95, warning=-50,
   base_performance=8 per shift, +5 per goal, -35 missed work) to land at
-  sensible values rather than saturating immediately as the 0..5 range
-  did before commit aabcb30.
+  sensible values rather than saturating immediately.
 -->
-<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_PerformanceStat_Historian" s="99700">
-  <T n="initial_value">0</T>
+<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_PerformanceStat_Historian" s="109226">
+  <U n="initial_tuning">
+    <T n="_initial_value">0</T>
+    <T n="_use_stat_value_on_init">True</T>
+  </U>
   <T n="max_value_tuning">100</T>
   <T n="min_value_tuning">-100</T>
 </I>

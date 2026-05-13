@@ -1,3 +1,21 @@
+_RETIRED_aspiration_track_HistorianCalling.xml has been retired
+temporarily (issue #23 follow-up). Shipping it triggers an Olympus AS3
+client crash at game launch:
+
+    TypeError: Error #1009: Cannot access a property or method of a null
+    object reference.
+        at gamedata.Gameplay.shared.definitions::AspirationTrackStaticData/INIT_DATA()
+
+That crash cascades to "STR:0x..._TRIAL_NOT_TRANSLATED" placeholders on
+the main menu and an empty join-career notification body in-game. See
+the big comment block at the top of the file for the full bisection
+trace. The in-game career works fine without it (the career levels
+chain through `aspiration_career_Historian_L*`, NOT this track); we
+just lose the CAS-side pickable "Historian's Calling" aspiration until
+a follow-up issue bisects the specific field the engine chokes on.
+
+---
+
 HC_ObjectMod_Computer_Affordances.xml has been retired.
 
 The same job is now done by the script-side injector in

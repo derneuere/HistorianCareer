@@ -228,22 +228,24 @@ const NEEDS_SIMDATA = new Set([
     // "Failed to locate category info for interaction category with key: …".
     // See Docs/NOTE_pie_menu_category_registration.md.
     "PieMenuCategory",
-    // NOTE: Statistic was added here briefly to fix the CareerPanel ProgressBar
-    // "Maximum cannot be equal to minimum" crash, on the theory that the C++
-    // runtime reads min/max from the Statistic SimData row. After landing it,
-    // the user's `careers.add_career career_Adult_Historian` started silently
-    // failing AND the Python instance manager's STATISTIC count dropped from
-    // 1157 → 1156 (HC_Statistic_HistorianLevel disappeared). Strong signal
-    // that our emitted Statistic SimData is malformed in a way Sims 4 rejects
-    // — taking the tuning XML down with it.  We back it out for now so the
-    // career can be added; the ProgressBar crash returns but isn't the
-    // blocker.  See lastException/lastUIException analysis on 2026-05-13 ~17:06.
-    // Re-enable once we have a known-good byte-equivalent dump against an EA
-    // Statistic SimData golden.
-    // "Statistic",
-    // NOTE: Statistic intentionally not in NEEDS_SIMDATA (see explanation
-    // 30 lines above).  We had it listed *twice* during the deep-investigation
-    // attempt; commenting out one occurrence wasn't enough.
+    // Statistic needs a SimData companion or the Olympus Career Panel's
+    // PerformanceDetails ProgressBar reads its max/min from a missing row,
+    // both come back 0, and SetRange(0, 0) throws
+    // `ProgressBar: Maximum cannot be equal to minimum` (see
+    // PerformanceDetails.as:93 + CareerInfo.performanceData in the
+    // UI.package AS3 decompile). The crash is non-fatal but produces
+    // garbage UI state cascading into "empty notification body" /
+    // "Job Pay" / "Time off" untranslated labels seen in issue #23.
+    //
+    // This was DISABLED briefly during issue-#23 investigation because the
+    // accompanying Statistic XML carried a 2.9 KB comment block with em-
+    // dashes that Sims 4's tuning loader silently rejected — taking the
+    // resource out of Types.STATISTIC and making `careers.add_career`
+    // fail with a NoneType.add_statistic AttributeError. Root cause was
+    // the comment block (not the SimData itself); now that build-package
+    // strips XML comments at load time, the Statistic resource registers
+    // correctly and we can ship its SimData companion alongside.
+    "Statistic",
 ]);
 
 // Locale name in strings.json → s4tk StringTableLocale enum value.
@@ -351,11 +353,36 @@ async function main() {
         .filter(f => f.endsWith(".xml") && !f.startsWith("_"));
 
     // Pass 1: read all XMLs and build the global name → instance map.
+    //
+    // XML comments are stripped at LOAD time, before any downstream
+    // processing or analysis. This is essential, not cosmetic (issue #23):
+    //
+    //   1. Sims 4 1.124.55's tuning loader silently rejects a Statistic
+    //      resource when its source XML carries a ~3 KB comment block with
+    //      Unicode characters (em-dashes, curly quotes). The failure has
+    //      no entry in lastException — indistinguishable from an instance-
+    //      ID collision, and we lost multiple debug cycles to it before
+    //      proving the comment block was the trigger via probes A/B/C/D.
+    //      Shipping comment-free XML removes that failure class.
+    //
+    //   2. The Pass-1 root-element scan and the Pass-2 name resolver both
+    //      use regex matches like /<I\s+...>/ and /<T>BODY<\/T>/. Either
+    //      could be fooled by a fake `<I>` or `<T>` token that lives only
+    //      inside a comment. Stripping comments at load time guarantees
+    //      that never happens.
+    //
+    // Source XML files keep their comments — the strip is a build-time
+    // transform only. Regex: non-greedy [\s\S]*? so `.` spans newlines.
+    // Multiple comments per file handled by the /g flag. The XML 1.0 spec
+    // (§2.5) forbids nested comments and ends at the first `-->`, which
+    // matches our regex's non-greedy behavior.
     /** @type {Map<string, string>} */
     const rawXmlByFile = new Map();
     for (const file of allTuningFiles) {
         const fullPath = path.join(TUNING_DIR, file);
-        rawXmlByFile.set(file, await fs.readFile(fullPath, "utf8"));
+        const raw = await fs.readFile(fullPath, "utf8");
+        const stripped = raw.replace(/<!--[\s\S]*?-->/g, "");
+        rawXmlByFile.set(file, stripped);
     }
     const nameToInstance = collectTuningNames(rawXmlByFile);
     console.log(`[builder] resolved ${nameToInstance.size} tuning name(s) → instance IDs`);
@@ -373,6 +400,8 @@ async function main() {
     let nameResolverWarnings = 0;
 
     // Pass 2: per-file substitution + add to package.
+    // (XML comments were already stripped at load time above — see the
+    // rawXmlByFile load loop. Nothing here re-strips, by design.)
     for (const file of allTuningFiles) {
         let xml = rawXmlByFile.get(file);
 

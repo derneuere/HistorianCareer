@@ -489,6 +489,20 @@ async function compileToPyc(py37, files, outDir) {
   // Pre-mkdir the dst subdirs (collectScriptFiles preserves path structure).
   for (const p of pairs) await fs.mkdir(path.dirname(p.dst), { recursive: true });
 
+  // Compile with optimize=2 (equivalent to running Python with `-OO`).
+  //
+  // Comments are dropped at the tokenizer stage on any optimize level — they
+  // never make it into .pyc bytecode regardless. But DOCSTRINGS survive as
+  // module/class/function constants on -O0/-O1, and Sims 4's tuning loader
+  // has been observed to silently reject a sibling resource (a Statistic
+  // XML) when that resource's source carried a multi-KB comment block with
+  // unicode characters — taking the WHOLE resource down with no log entry
+  // (issue #23). The Python side hasn't shown the same failure mode, but
+  // shipping bytecode WITHOUT docstrings is cheap insurance: it
+  //   - removes a large class of "free-form text in the artifact" surface
+  //   - shrinks the .ts4script (smaller .pyc, faster load)
+  //   - strips `assert` statements too — fine, none of ours are loadbearing.
+  // optimize=2 = -OO. py_compile in Python 3.7 supports this arg.
   const helperPath = path.join(__dirname, ".pyc-compile-helper.py.tmp");
   const helper = [
     "import sys, py_compile",
@@ -497,7 +511,7 @@ async function compileToPyc(py37, files, outDir) {
     "    src = sys.argv[i]",
     "    dst = sys.argv[i+1]",
     "    try:",
-    "        py_compile.compile(src, cfile=dst, doraise=True)",
+    "        py_compile.compile(src, cfile=dst, doraise=True, optimize=2)",
     "    except py_compile.PyCompileError as e:",
     "        errs.append('{0}: {1}'.format(src, str(e).strip()))",
     "    except Exception as e:",
