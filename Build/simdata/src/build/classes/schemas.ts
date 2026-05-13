@@ -398,6 +398,56 @@ export const PIE_MENU_CATEGORY_SCHEMA: TdescSchema = deepFreeze<TdescSchema>({
 });
 
 // ---------------------------------------------------------------------------
+// Statistic. Hand-authored (no TDESC fixture for this class).
+//
+// CRITICAL: this companion SimData is REQUIRED for any Statistic that drives
+// the Career Performance bar. Without it, the C++ runtime constructs the
+// in-game `PerformanceStaticData` (referenced from `CareerLevel.performance`
+// in AS3) with min_value=0 and max_value=0, and the Olympus Career Panel
+// throws:
+//
+//   Error: ProgressBar: Maximum cannot be equal to minimum
+//       at olympus.gui.progressbars::ProgressBar/SetRange()
+//       at widgets.Gameplay.SimInfoHUD.CareerPanel::PerformanceDetails/Draw()
+//
+// when the user expands the career panel.  The Olympus `PerformanceDetails`
+// AS3 builds the range from `currentCareerLevel.performance.min_value /
+// .max_value` (PerformanceDetails.as:93), and the engine populates those
+// fields by following each CareerLevel SimData's `performance_stat`
+// TableSetReference → Statistic SimData row → `min_value_tuning` /
+// `max_value_tuning` columns. No Statistic SimData → no usable range.
+//
+// EA's runtime emits a 3-column row per Statistic — verified by extracting
+// `statistic_Career_Performance_Writer` (instance 0x6c88) from EA's
+// SimulationFullBuild0.package:
+//
+//   schema: Statistic (hash 0x8273c673)
+//     max_value_tuning   Int32           = +100
+//     min_value_tuning   Int32           = -100
+//     stat_name          LocalizationKey = 0
+//
+// Hand-extracted from a real EA SimData. Columns are alphabetically ordered
+// (SimData convention). Schema hash is registered in KNOWN_SCHEMA_HASHES.
+// ---------------------------------------------------------------------------
+export const STATISTIC_SCHEMA: TdescSchema = deepFreeze<TdescSchema>({
+  className: "Statistic",
+  classPath: "statistics.statistic.Statistic",
+  rootColumns: [
+    // The runtime reads these as `cls.min_value_tuning` / `cls.max_value_tuning`
+    // (see simulation/statistics/statistic.pyc: Statistic.min_value /
+    // Statistic.max_value). EA's Career-performance stats use -100..+100.
+    // Defaults below mirror EA's `statistic_Career_Performance` (instance
+    // 0x4116), which only declares `min_value_tuning` in tuning and lets
+    // `max_value_tuning` fall back to its TDESC default of 100.
+    col("max_value_tuning", { kind: "int32" }, 100),
+    col("min_value_tuning", { kind: "int32" }, -100),
+    // EA's binary stores `stat_name` even when the tuning XML omits it — the
+    // default is the empty-string LocalizationKey (0).
+    col("stat_name",        STRING_KEY,        0),
+  ],
+});
+
+// ---------------------------------------------------------------------------
 // EA-canonical schema hashes. These are EA-internal layout checksums; we can't
 // regenerate them from TDESCs (see docs/tdesc-format.md). Extracted from the
 // real EA SimData goldens in `test/golden/` (1.124.55 game build).
@@ -422,6 +472,13 @@ export const KNOWN_SCHEMA_HASHES: Readonly<Record<string, number>> = Object.free
   PieMenuCategory: 0x022065c1,
   mood_to_override_data: 0xeac32ff0,
   text_overrides: 0x9c77ff5d,
+  // Statistic schema hash — required for the C++ engine to recognize the
+  // SimData row as a Statistic and populate `PerformanceStaticData.min_value
+  // / .max_value` for the Career Panel ProgressBar. Extracted from EA's
+  // `statistic_Career_Performance_Writer` (instance 0x6c88). Without this
+  // exact hash, the row is silently dropped and the panel crashes with
+  // "Error: ProgressBar: Maximum cannot be equal to minimum".
+  Statistic: 0x8273c673,
   // Nested schema for AspirationTrack.aspirations (mapping key→value tuple).
   // EA extracts this from the live game; we can't derive it from a name hash.
   aspirations: 0xfb8c84bc,

@@ -118,6 +118,36 @@ async function exists(p) {
 }
 
 /**
+ * Returns true when any `.ts` file under `<simdataDir>/src` has an mtime newer
+ * than the freshest file in `<simdataDir>/dist`. Cheap, no hashing — just stat
+ * traversal. Used to decide whether tsc needs to re-run before each build.
+ */
+async function isSourceNewerThanDist(simdataDir) {
+  const srcDir = path.join(simdataDir, "src");
+  const distDir = path.join(simdataDir, "dist");
+  if (!(await exists(srcDir)) || !(await exists(distDir))) return true;
+  async function newestMtimeUnder(root, extFilter) {
+    let newest = 0;
+    async function walk(dir) {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) await walk(p);
+        else if (!extFilter || extFilter(e.name)) {
+          const stat = await fs.stat(p);
+          if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+        }
+      }
+    }
+    await walk(root);
+    return newest;
+  }
+  const srcNewest  = await newestMtimeUnder(srcDir,  n => n.endsWith(".ts"));
+  const distNewest = await newestMtimeUnder(distDir, n => n.endsWith(".js"));
+  return srcNewest > distNewest;
+}
+
+/**
  * Auto-detect the Sims 4 user-data folder. The game localizes its folder name
  * by language (Die Sims 4 / Les Sims 4 / Los Sims 4 / …). Prefer the sibling
  * under ~/Documents/Electronic Arts/ that has an Options.ini (the marker that
@@ -146,12 +176,18 @@ async function buildPackage({ layerB }) {
   log(`==> Building ${path.relative(PROJECT_ROOT, PACKAGE_OUT)} (s4tk-builder)`);
 
   // Ensure simdata is npm-installed and tsc-compiled when Layer B is wanted.
+  // Also recompile when any source file is newer than the dist (otherwise edits
+  // to schemas.ts or classes/index.ts silently don't reach the build until you
+  // manually rm -rf dist/). Common dev-loop trap: agent edits a .ts schema,
+  // build runs the stale dist, package ships without the new class registered.
   if (await exists(SIMDATA_DIR)) {
     if (!(await exists(path.join(SIMDATA_DIR, "node_modules")))) {
       log("    installing simdata dependencies...", "gray");
       await run("npm", ["install", "--silent"], { cwd: SIMDATA_DIR });
     }
-    if (!(await exists(path.join(SIMDATA_DIR, "dist", "index.js")))) {
+    const distIndex = path.join(SIMDATA_DIR, "dist", "index.js");
+    const needsCompile = !(await exists(distIndex)) || (await isSourceNewerThanDist(SIMDATA_DIR));
+    if (needsCompile) {
       log("    compiling simdata (tsc)...", "gray");
       await run("npx", ["tsc"], { cwd: SIMDATA_DIR });
     }
@@ -168,13 +204,25 @@ async function buildPackage({ layerB }) {
 }
 
 // ----------------------------------------------------------------------------
-// Step 2: build the .ts4script (zip of raw .py files)
+// Step 2: build the .ts4script (zip of compiled .pyc files)
 //
-// Sims 4 ships CPython 3.7 with the full import system, and `zipimport`
-// accepts both `.py` and `.pyc` inside a .ts4script. We ship raw `.py` so
-// the build needs zero Python dependency — the game compiles on first
-// import (~10 ms × 3 files = negligible). Verified by inspecting EA's own
-// .ts4script files which contain a mix of .py and .pyc.
+// Originally (commit 46fe592) we shipped raw .py and relied on Sims 4's
+// runtime CPython 3.7 to compile on first import. That theoretically works
+// (zipimport accepts both .py and .pyc per PEP 273) but in practice, on
+// 1.124.55, our raw-.py packages silently fail to load: no entry in
+// lastException.txt, no `historiancareer_debug.log` write, no marker from
+// our `_hc_emit_loadtest_marker()` at the top of __init__.py — Sims 4's
+// import system simply doesn't reach our package. EA's own ts4scripts all
+// ship .pyc; matching their convention is what makes our package visible.
+//
+// We compile with Python 3.7 specifically (matches Sims 4's interpreter
+// version — .pyc bytecode magic numbers are version-locked, and Sims 4's
+// 3.7 will silently reject .pyc compiled with 3.10/3.11/3.12).
+//
+// If Python 3.7 isn't installed (no `py -3.7` and no `python3.7`), we fall
+// back to shipping raw .py with a loud warning. The user can install 3.7
+// from https://www.python.org/downloads/release/python-379/ — small,
+// fast, and the only thing the build needs Python for.
 // ----------------------------------------------------------------------------
 
 // CRC32 table (precomputed lazily, IEEE polynomial 0xEDB88320).
@@ -305,25 +353,233 @@ async function writeZip(outPath, files) {
   return { entryCount, bytes: out.length };
 }
 
+/**
+ * Catch the most common stale-cache-defeating bug: shipping a .ts4script that
+ * fails to compile inside the game. Sims 4 silently swallows SyntaxError /
+ * IndentationError / TabError during package import (it just logs to console,
+ * which most players can't see). We've now lost two debug cycles to this; if
+ * we can detect it at build time, do.
+ *
+ * We invoke Python 3 (any 3.7+) to `compile()` each .py file. If `python3` /
+ * `py` / `python` isn't on PATH (rare on modern Win/Mac/Linux dev boxes) we
+ * SKIP rather than fail — the build is still useful, the user just doesn't
+ * get the static safety net.
+ *
+ * `compile(source, filename, "exec")` raises SyntaxError on any of the three
+ * structural-error types. Returns a list of {file, error} on failure, [] on
+ * success.
+ */
+async function pythonSyntaxCheck(files) {
+  // Find a python interpreter on PATH. Prefer python3 (Mac/Linux convention)
+  // → py -3 (Win launcher) → python (anywhere). We probe with `-V` and a
+  // shell, since on Windows `py.exe` is on PATH but locating it via
+  // child_process.spawn without a shell needs `.exe`.  Both probe and run
+  // use the same shell setting to avoid path-resolution mismatches.
+  const useShell = process.platform === "win32";
+  const candidates = useShell
+    ? ["py", "python3", "python"]
+    : ["python3", "python"];
+  let chosen = null;
+  for (const c of candidates) {
+    try {
+      await new Promise((resolve, reject) => {
+        const probeArgs = c === "py" ? ["-3", "-V"] : ["-V"];
+        const child = spawn(c, probeArgs, { shell: useShell });
+        child.on("error", reject);
+        child.on("exit", code => code === 0 ? resolve() : reject(new Error(`exit ${code}`)));
+      });
+      chosen = c;
+      break;
+    } catch { /* try next */ }
+  }
+  if (!chosen) {
+    log("    skipping Python syntax check (no python3 on PATH)", "gray");
+    return [];
+  }
+
+  // Embed-checking via `-c` is annoying cross-platform: on Windows with
+  // `shell: true`, the shell reparses the argument and our embedded newlines
+  // break. Workaround: write the checker as a small .py file alongside
+  // build.mjs and invoke it normally.
+  const checkerPath = path.join(__dirname, "..py-syntax-check.py.tmp");
+  const checker = [
+    "import sys, ast",
+    "errs = []",
+    "for p in sys.argv[1:]:",
+    "    try:",
+    "        with open(p, 'rb') as f:",
+    "            src = f.read()",
+    "        ast.parse(src, filename=p)",
+    "    except SyntaxError as e:",
+    "        errs.append('{0}:{1}:{2}: {3}: {4}'.format(p, e.lineno, e.offset, type(e).__name__, e.msg))",
+    "    except Exception as e:",
+    "        errs.append('{0}: {1}: {2}'.format(p, type(e).__name__, e))",
+    "if errs:",
+    "    for e in errs: print(e)",
+    "    sys.exit(1)",
+    "",
+  ].join("\n");
+  await fs.writeFile(checkerPath, checker, "utf8");
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const args = chosen === "py" ? ["-3", checkerPath] : [checkerPath];
+      for (const f of files) args.push(f.full);
+      const stderrChunks = [];
+      const stdoutChunks = [];
+      const child = spawn(chosen, args, { shell: useShell });
+      child.stdout.on("data", d => stdoutChunks.push(d));
+      child.stderr.on("data", d => stderrChunks.push(d));
+      child.on("error", reject);
+      child.on("exit", code => {
+        const stdout = Buffer.concat(stdoutChunks).toString();
+        const stderr = Buffer.concat(stderrChunks).toString();
+        if (code === 0) return resolve([]);
+        const lines = stdout.split(/\r?\n/).filter(Boolean);
+        resolve(lines.length ? lines : [stderr || `python exited ${code}`]);
+      });
+    });
+  } finally {
+    try { await fs.rm(checkerPath); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Locate a Python 3.7 interpreter. Returns the spawn command + args prefix, or
+ * null if none found. On Windows, `py -3.7` is the launcher convention; on
+ * Linux/macOS, `python3.7` is the standard path. We require 3.7 specifically
+ * because Sims 4 ships 3.7 and .pyc bytecode magic is version-locked.
+ */
+async function findPython37() {
+  const useShell = process.platform === "win32";
+  const candidates = useShell
+    ? [{ cmd: "py", args: ["-3.7"] }, { cmd: "python3.7", args: [] }]
+    : [{ cmd: "python3.7", args: [] }, { cmd: "python3", args: [] }];
+  for (const c of candidates) {
+    try {
+      const versionOutput = await new Promise((resolve, reject) => {
+        const out = [];
+        const child = spawn(c.cmd, [...c.args, "-V"], { shell: useShell });
+        child.stdout.on("data", d => out.push(d));
+        child.stderr.on("data", d => out.push(d));
+        child.on("error", reject);
+        child.on("exit", code => code === 0 ? resolve(Buffer.concat(out).toString()) : reject(new Error(`exit ${code}`)));
+      });
+      if (/Python 3\.7\./.test(versionOutput)) return c;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+/**
+ * Compile a list of .py files to .pyc using Python 3.7's `py_compile`. Returns
+ * a list of { full, name } where `full` is the .pyc on disk and `name` is the
+ * POSIX-relative entry name (matching what the .py would have been, but with
+ * .pyc extension). On compile error, throws with the per-file diagnostics.
+ */
+async function compileToPyc(py37, files, outDir) {
+  await fs.mkdir(outDir, { recursive: true });
+  // Build a {source: dest} map and feed it to a small helper script that
+  // py_compile.compile()'s each one. Cleaner than spawning N processes.
+  const pairs = files.map(f => ({
+    src: f.full,
+    dst: path.join(outDir, f.name.replace(/\.py$/, ".pyc")),
+    name: f.name.replace(/\.py$/, ".pyc"),
+  }));
+  // Pre-mkdir the dst subdirs (collectScriptFiles preserves path structure).
+  for (const p of pairs) await fs.mkdir(path.dirname(p.dst), { recursive: true });
+
+  const helperPath = path.join(__dirname, ".pyc-compile-helper.py.tmp");
+  const helper = [
+    "import sys, py_compile",
+    "errs = []",
+    "for i in range(1, len(sys.argv), 2):",
+    "    src = sys.argv[i]",
+    "    dst = sys.argv[i+1]",
+    "    try:",
+    "        py_compile.compile(src, cfile=dst, doraise=True)",
+    "    except py_compile.PyCompileError as e:",
+    "        errs.append('{0}: {1}'.format(src, str(e).strip()))",
+    "    except Exception as e:",
+    "        errs.append('{0}: {1}: {2}'.format(src, type(e).__name__, e))",
+    "if errs:",
+    "    for e in errs: print(e)",
+    "    sys.exit(1)",
+    "",
+  ].join("\n");
+  await fs.writeFile(helperPath, helper, "utf8");
+
+  try {
+    await new Promise((resolve, reject) => {
+      const args = [...py37.args, helperPath];
+      for (const p of pairs) { args.push(p.src, p.dst); }
+      const stdoutChunks = [], stderrChunks = [];
+      const child = spawn(py37.cmd, args, { shell: process.platform === "win32" });
+      child.stdout.on("data", d => stdoutChunks.push(d));
+      child.stderr.on("data", d => stderrChunks.push(d));
+      child.on("error", reject);
+      child.on("exit", code => {
+        if (code === 0) return resolve();
+        const stdout = Buffer.concat(stdoutChunks).toString();
+        const stderr = Buffer.concat(stderrChunks).toString();
+        const lines = stdout.split(/\r?\n/).filter(Boolean);
+        reject(new Error(`Python 3.7 compile failed:\n${(lines.length ? lines : [stderr]).join("\n")}`));
+      });
+    });
+  } finally {
+    try { await fs.rm(helperPath); } catch { /* ignore */ }
+  }
+  return pairs.map(p => ({ full: p.dst, name: p.name }));
+}
+
 async function buildTs4Script() {
-  log(`==> Building ${path.relative(PROJECT_ROOT, TS4SCRIPT_OUT)} (raw .py, deflate-zipped)`);
+  log(`==> Building ${path.relative(PROJECT_ROOT, TS4SCRIPT_OUT)} (.pyc bytecode, deflate-zipped)`);
 
   if (!(await exists(SCRIPTS_DIR))) {
     throw new Error(`Scripts/ directory not found at ${SCRIPTS_DIR}`);
   }
-  const files = await collectScriptFiles(SCRIPTS_DIR);
-  if (files.length === 0) {
+  const sourceFiles = await collectScriptFiles(SCRIPTS_DIR);
+  if (sourceFiles.length === 0) {
     console.warn(C.yellow(`[warn] no .py files under ${SCRIPTS_DIR}; ts4script will be empty.`));
+  }
+
+  // Gate the zip on a Python syntax check (cheap, runs with any Python 3+).
+  // We've shipped builds with hidden errors that Sims 4 silently swallowed;
+  // catching them BEFORE the zip is created costs ~50ms.
+  const syntaxErrs = await pythonSyntaxCheck(sourceFiles);
+  if (syntaxErrs.length > 0) {
+    console.error(C.red(`[FAIL] Python syntax errors detected; refusing to build .ts4script:`));
+    for (const e of syntaxErrs) console.error(C.red(`    ${e}`));
+    throw new Error(`${syntaxErrs.length} Python syntax error(s) in Scripts/`);
+  }
+
+  // Compile to .pyc using Python 3.7 (matches Sims 4's interpreter — .pyc
+  // magic numbers are version-locked and 3.7 will silently reject anything
+  // else). Falls back to raw .py with a loud warning if 3.7 isn't installed.
+  const py37 = await findPython37();
+  let zipFiles;
+  if (py37) {
+    log(`    compiling with Python 3.7 (${py37.cmd} ${py37.args.join(" ")})`, "gray");
+    const pycOutDir = path.join(__dirname, ".pyc-build");
+    // Wipe old .pyc dir so stale entries can't sneak into the zip.
+    try { await fs.rm(pycOutDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    zipFiles = await compileToPyc(py37, sourceFiles, pycOutDir);
+  } else {
+    console.warn(C.yellow(`[warn] Python 3.7 not found on PATH (looked for 'py -3.7', 'python3.7').`));
+    console.warn(C.yellow(`[warn] Falling back to raw .py — Sims 4 has been observed to silently`));
+    console.warn(C.yellow(`[warn] skip loading .ts4scripts that contain raw .py instead of .pyc.`));
+    console.warn(C.yellow(`[warn] Install 3.7 from https://www.python.org/downloads/release/python-379/`));
+    zipFiles = sourceFiles;
   }
 
   // Atomic replace: write to a tmp path, then rename.
   const tmp = TS4SCRIPT_OUT + ".tmp";
   if (existsSync(tmp)) await fs.rm(tmp);
   if (existsSync(TS4SCRIPT_OUT)) await fs.rm(TS4SCRIPT_OUT);
-  const { entryCount, bytes } = await writeZip(tmp, files);
+  const { entryCount, bytes } = await writeZip(tmp, zipFiles);
   await fs.rename(tmp, TS4SCRIPT_OUT);
 
-  for (const f of files) console.log(C.gray(`    + ${f.name}`));
+  for (const f of zipFiles) console.log(C.gray(`    + ${f.name}`));
   log(`    ${entryCount} entr${entryCount === 1 ? "y" : "ies"}, ${bytes} bytes`, "gray");
 }
 
@@ -356,11 +612,21 @@ async function install({ modsFolder, packageOnly, scriptOnly }) {
 // game" risks the player seeing yesterday's build.
 //
 // We delete:
-//   localthumbcache.package        primary thumbnail cache
-//   Onlinethumbnailcache.package   Gallery / online cache
-//   avatarcache.package            sim avatar cache
-//   cachestr/   (contents)         streamed asset cache
-//   cache/      (contents)         general resource cache
+//   localthumbcache.package           primary thumbnail cache
+//   localsimtexturecache.package      Sim texture cache (large; ~30MB+)
+//   localsimtravelthumbcache.package  travel-screen Sim thumbnail cache
+//   Onlinethumbnailcache.package      Gallery / online cache (legacy filename)
+//   avatarcache.package               sim avatar cache
+//   accountDataDB.package             account-side DB cache
+//   clientDB.package                  client-side DB cache
+//   houseDescription-client.package   house-description cache
+//   cachestr/      (contents)         streamed asset cache
+//   cache/         (contents)         general resource cache
+//   onlinethumbnailcache/ (contents)  Gallery / online thumbnail cache (current)
+//
+// Without the DB-package caches, Sims 4 has been observed to silently filter
+// mod-added aspirations / careers from binary-indexed CAS pickers even after
+// the tuning + SimData are byte-correct (refs #17).
 //
 // We leave lastException*.txt / lastUIException*.txt alone — those are
 // diagnostic logs from previous crashes; deleting them masks the very
@@ -371,10 +637,15 @@ async function nukeCache({ userDataFolder }) {
   log(`==> Clearing Sims 4 caches in ${userDataFolder}`);
   const files = [
     "localthumbcache.package",
+    "localsimtexturecache.package",
+    "localsimtravelthumbcache.package",
     "Onlinethumbnailcache.package",
     "avatarcache.package",
+    "accountDataDB.package",
+    "clientDB.package",
+    "houseDescription-client.package",
   ];
-  const dirs = ["cachestr", "cache"];
+  const dirs = ["cachestr", "cache", "onlinethumbnailcache"];
 
   let cleared = 0;
   for (const f of files) {

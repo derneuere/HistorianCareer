@@ -144,6 +144,38 @@ def _inject_once():
             _log("  Instance managers not ready; deferring injection.")
             return
 
+        # Cross-manager HC_* enumeration. We're chasing a "careers.add_career
+        # silently fails" symptom where the Python instance manager seems to
+        # not have HC_Statistic_HistorianLevel; enumerating EVERY HC_*-prefixed
+        # class across the relevant instance managers gives us a single ground-
+        # truth list of what Sims 4's tuning loader actually accepted.
+        try:
+            for mgr_name, mgr_type in (
+                ("STATISTIC", getattr(Types, "STATISTIC", None)),
+                ("ASPIRATION", getattr(Types, "ASPIRATION", None)),
+                ("ASPIRATION_TRACK", getattr(Types, "ASPIRATION_TRACK", None)),
+                ("CAREER", getattr(Types, "CAREER", None)),
+                ("CAREER_LEVEL", getattr(Types, "CAREER_LEVEL", None)),
+                ("CAREER_TRACK", getattr(Types, "CAREER_TRACK", None)),
+                ("TRAIT", getattr(Types, "TRAIT", None)),
+                ("OBJECTIVE", getattr(Types, "OBJECTIVE", None)),
+                ("PIE_MENU_CATEGORY", getattr(Types, "PIE_MENU_CATEGORY", None)),
+                ("ACTION", getattr(Types, "ACTION", None)),
+            ):
+                if mgr_type is None: continue
+                m = services.get_instance_manager(mgr_type)
+                if m is None: continue
+                hc_in_mgr = []
+                for key, cls in m.types.items():
+                    cls_name = getattr(cls, "__name__", "")
+                    if isinstance(cls_name, str) and (cls_name.startswith("HC_") or cls_name.startswith("aspiration_HistorianCalling") or cls_name.startswith("aspiration_career_Historian") or cls_name.startswith("aspiration_track_HistorianCalling") or cls_name.startswith("career_Adult_Historian") or cls_name.startswith("career_level_Adult_Historian") or cls_name.startswith("career_track_Adult_Historian") or cls_name.startswith("trait_Habilitation") or cls_name.startswith("objective_HC_")):
+                        hc_in_mgr.append(cls_name)
+                _log(f"  HC_* in Types.{mgr_name}: count={len(hc_in_mgr)}")
+                for n in sorted(hc_in_mgr):
+                    _log(f"    {mgr_name}: {n}")
+        except Exception as e:
+            _log(f"  HC cross-manager enum failed: {e}\n{traceback.format_exc()}")
+
         # First, enumerate what HC_Interaction_* IS registered. This tells us if
         # the tunings actually loaded; if the lookup-by-name fails for some, then
         # we can find them in this enumeration and use their objects directly.

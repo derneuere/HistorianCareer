@@ -6,8 +6,32 @@
   variant in EA's TDESC, not at root; EA's own AspirationCareer goldens omit
   them entirely (e.g. aspiration_Culinary_Level5). The player sees the level
   title from the parent CareerLevel's `title`/`title_description`.
+
+  aspiration_valid_age_type — closes issue #22. The career panel widget
+  (SimInfoCareerPanelMain.RefreshPanelHeightRange) walks
+    CareerLevel.aspiration -> AspirationCareer.objectives
+  to render the expanded "daily tasks" rows. EA's runtime gates references
+  to Aspiration-derived classes through `Aspiration.is_valid_for_sim`,
+  which evaluates `sim_info.age & self.aspiration_valid_age_type`. The TDESC
+  declares `parents=AspirationBasic` for AspirationCareer, suggesting the
+  field is inert here, but EA's Python class hierarchy diverges from the
+  TDESC: `AspirationCareer` inherits the validity gate at runtime, and an
+  unset (or `INVALID=0`) age-type silently fails the AND, leaving the
+  panel's resolved aspiration ref null. The CareerCellView expander then
+  reads an empty objectives array and `array[0]` throws Error #1125 ("the
+  index 0 is out of range 0"). Same enum-fallback bug family as #17 (which
+  fixed it for the CAS-side aspiration tiers); the career-side
+  AspirationCareer instances need the same explicit value. CAS visits make
+  the bug deterministic because the post-CAS reload re-runs the runtime
+  validity gate (pre-CAS the panel may use a cached non-null ref). See
+  Docs/NOTE_aspiration_track_registration.md for the load-time trace of
+  the enum-fallback mechanism. Historian is YA/Adult/Elder gameplay, but
+  TEEN_OR_OLDER (= TEEN|YA|ADULT|ELDER = 120) is the only multi-age
+  member EA ships; the career_availablity_tests on the Career enforce the
+  real gating (YA/A/E).
 -->
 <I c="AspirationCareer" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_career_Historian_L1" s="TBD_INSTANCE_ID">
+  <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
   <L n="objectives">
     <T>objective_HC_RunTranscribeManuscript_x2</T>
     <T>objective_HC_ReadNonfictionBook</T>

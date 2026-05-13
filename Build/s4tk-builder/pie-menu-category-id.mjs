@@ -92,6 +92,13 @@ export const SMALL_ID_CLASSES = new Set([
     // stat = 27784, ranging up to ~100K). Our HC_Statistic_HistorianLevel is
     // referenced from CareerLevel.performance_stat — needs to be 31-bit.
     "Statistic",
+    // Commodity extends Statistic and goes into the same STATISTIC instance
+    // manager.  EA's CareerLevel.performance_stat description literally says
+    // "Commodity used to track career performance" — so HC's stat is now a
+    // Commodity to pass the consumer-side validation EA's runtime applies
+    // (see Tuning/HC_Statistic_HistorianLevel.xml header for the empirical
+    // 1157 → 1156 → 1157 manager-count evidence behind that switch).
+    "Commodity",
 ]);
 
 /**

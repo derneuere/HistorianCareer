@@ -122,6 +122,21 @@ import {
 // pure passes, separated so the swap logic can be unit-tested without IO.
 import { collectTuningNames, resolveNamesInXml } from "./resolve-names.mjs";
 
+// Build-time guard against silent enum-name fallbacks (issue #17). EA's
+// Tunable XML parser silently falls back to the enum default on an unknown
+// member name, which makes the affected resource quietly disappear from
+// runtime UI. The validator throws if any tracked field uses a non-member.
+import { assertKnownEnumValues } from "./validate-enums.mjs";
+
+// Build-time guard against null/zero AspirationTrack + Aspiration SimData
+// fields (issue #17 follow-up). EA's Olympus AS3 client lazy-loads the track
+// catalog via `AspirationTrackStaticData.INIT_DATA()`, which dereferences
+// `_loc4_.aspirations.length` directly — null in that field crashes the
+// entire CAS aspiration picker for the whole session. The validator throws
+// at build time if any column EA always populates non-null is null/zero in
+// our emitted SimData.
+import { assertSimDataPopulated } from "./validate-simdata.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const TUNING_DIR = path.join(PROJECT_ROOT, "Tuning");
@@ -213,6 +228,22 @@ const NEEDS_SIMDATA = new Set([
     // "Failed to locate category info for interaction category with key: …".
     // See Docs/NOTE_pie_menu_category_registration.md.
     "PieMenuCategory",
+    // NOTE: Statistic was added here briefly to fix the CareerPanel ProgressBar
+    // "Maximum cannot be equal to minimum" crash, on the theory that the C++
+    // runtime reads min/max from the Statistic SimData row. After landing it,
+    // the user's `careers.add_career career_Adult_Historian` started silently
+    // failing AND the Python instance manager's STATISTIC count dropped from
+    // 1157 → 1156 (HC_Statistic_HistorianLevel disappeared). Strong signal
+    // that our emitted Statistic SimData is malformed in a way Sims 4 rejects
+    // — taking the tuning XML down with it.  We back it out for now so the
+    // career can be added; the ProgressBar crash returns but isn't the
+    // blocker.  See lastException/lastUIException analysis on 2026-05-13 ~17:06.
+    // Re-enable once we have a known-good byte-equivalent dump against an EA
+    // Statistic SimData golden.
+    // "Statistic",
+    // NOTE: Statistic intentionally not in NEEDS_SIMDATA (see explanation
+    // 30 lines above).  We had it listed *twice* during the deep-investigation
+    // attempt; commenting out one occurrence wasn't enough.
 ]);
 
 // Locale name in strings.json → s4tk StringTableLocale enum value.
@@ -328,6 +359,12 @@ async function main() {
     }
     const nameToInstance = collectTuningNames(rawXmlByFile);
     console.log(`[builder] resolved ${nameToInstance.size} tuning name(s) → instance IDs`);
+
+    // Pass 1b: assert every tracked `<E n="…">VALUE</E>` body is a real EA
+    // enum member. Throws with a precise diff if any file has a silent-
+    // fallback-bait value (e.g. the YAE_ONLY ↔ TEEN_OR_OLDER bug from #17).
+    // Pure check — no XML rewrite, no IO.
+    assertKnownEnumValues(rawXmlByFile);
 
     const entries = []; // { key: {type, group, instance}, value: Resource }
     const usedInstances = new Map(); // instance(bigint) -> tuningName  (collision check)
@@ -534,6 +571,27 @@ async function main() {
     // 5. Serialize and write the .package.
     // -----------------------------------------------------------------------
     const pkg = new Package(entries);
+
+    // Defensive check: every AspirationTrack + Aspiration SimData must
+    // populate the columns EA's shipping rows always populate non-null.
+    // A null/zero cell here can crash the Olympus AS3 client at game launch
+    // via `AspirationTrackStaticData.INIT_DATA()._loc4_.aspirations.length`,
+    // and once that throws STATIC_DATA_PER_CATEGORY stays uninitialised —
+    // i.e. NO aspiration tracks render in CAS, not even EA's. See issue #17
+    // and Docs/NOTE_cas_aspiration_picker_swf.md §5.
+    //
+    // This runs AFTER all SimData has been generated (so we catch any
+    // regression that nulls out a field downstream) but BEFORE we serialise
+    // to disk (so a regression never ships). Errors from this check abort
+    // the build.
+    if (INCLUDE_LAYER_B) {
+      const { tracksChecked, aspirationsChecked } = assertSimDataPopulated(pkg);
+      console.log(
+        `[ok]   SimData populated-fields check: ${tracksChecked} AspirationTrack(s), ` +
+          `${aspirationsChecked} Aspiration(s) — all required fields non-null.`,
+      );
+    }
+
     const buffer = pkg.getBuffer();
     await fs.writeFile(OUT_PACKAGE, buffer);
 

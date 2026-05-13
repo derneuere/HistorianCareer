@@ -34,7 +34,7 @@
   <T n="ideal_mood">14641</T>
 
   <!-- Performance commodity — our own per-career level statistic. -->
-  <T n="performance_stat">HC_Statistic_HistorianLevel</T>
+  <T n="performance_stat">HC_PerformanceStat_Historian</T>
 
   <U n="performance_metrics">
     <T n="base_performance">8</T>

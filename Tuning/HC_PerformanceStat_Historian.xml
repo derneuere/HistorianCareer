@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HC career-performance statistic. Drives the per-shift Performance bar in
+  the expanded Career Panel and the promote/demote/fire thresholds in EA's
+  CareerLevel logic.
+
+  SHAPE: copied verbatim from EA's statistic_Career_Performance_Writer
+  --------------------------------------------------------------------
+  Extracted from `Data/Simulation/SimulationFullBuild0.package` via
+  `Build/_research_tmp/extract-writer-ref.mjs` (gitignored). EA's full
+  file is exactly:
+
+      [I c=Statistic i=statistic m=statistics.statistic n=statistic_Career_Performance_Writer s=27784]
+        [T n=initial_value]0[/T]
+        [T n=max_value_tuning]100[/T]
+        [T n=min_value_tuning]-100[/T]
+      [/I]
+
+  Three tunables, class=Statistic (NOT Commodity — verified against EA's
+  shipped tunings: every adult-career performance stat in the writer-ref
+  extract is class=Statistic with this exact 3-field shape).  `initial_value`
+  is a deprecated shortcut for `initial_tuning._initial_value` and IS
+  accepted by Sims 4 1.124.55's tuning loader.
+
+  WHY NOT EXPLICIT `initial_tuning` TUPLE
+  ---------------------------------------
+  The structured form `[U n=initial_tuning][T n=_initial_value]0[/T][/U]`
+  is also valid but our earlier attempts at that shape failed to register
+  with our 31-bit instance ID.  Matching EA's shape exactly removes one
+  variable from the debugging space.
+
+  17-BIT INSTANCE ID (s=99701)
+  ----------------------------
+  EA's career-performance statistics live at s=27784 (Writer), s=27783
+  (TechGuru), s=16662 (generic base) — all 16/17-bit.  lot51-core's
+  `patches/custom_filter_career_fix.py` shows EA's runtime has a known
+  bug that drops 64-bit instance IDs from career-related dicts; the same
+  truncation may apply silently to Statistic IDs.  Our 31-bit ID
+  (0x3F16A005, from smallInstanceIdFor) was working for every other HC
+  tuning but the affordance_injector diagnostic shows HC_Statistic_*
+  NEVER appearing in Types.STATISTIC.  Force a 17-bit ID in the EA range
+  to remove that variable too.
+
+  Specifically: 99701 = 0x18575, comfortably above EA's used range
+  (16662..27784 for performance stats; ~70000 max for any EA stat per
+  the SMALL_ID hints in pie-menu-category-id.mjs) and 17-bit clean.
+
+  RANGE -100..+100
+  ----------------
+  Matches every EA career performance stat.  Critical for our CareerLevel
+  scoring tunables (promote=100, demote=-80, fired=-95, warning=-50,
+  base_performance=8 per shift, +5 per goal, -35 missed work) to land at
+  sensible values rather than saturating immediately as the 0..5 range
+  did before commit aabcb30.
+-->
+<I c="Statistic" i="statistic" m="statistics.statistic" n="HC_PerformanceStat_Historian" s="99700">
+  <T n="initial_value">0</T>
+  <T n="max_value_tuning">100</T>
+  <T n="min_value_tuning">-100</T>
+</I>
