@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  L4: Volontariat (Trainee). Near-full schedule, traineeship pay.
+  L10: Direktor:in (Institute Director). Capstone rank. Prestige schedule:
+  Tue-Fri only, later start (11-18). The random employer flavours the specific
+  "Direktor:in of what" narrative. Single-track; no branch_selection.
 
   Field names per EA CareerLevel TDESC; see career_level_Adult_Historian_L1.xml.
-  Incoming promotion (L3->L4) is performance-only per DESIGN.
+  Incoming promotion (L9->L10) requires Charisma >= 5
+  (block_promotion_tests on career_Adult_Historian.xml).
 -->
-<I c="CareerLevel" i="career_level" m="careers.career_tuning" n="career_level_Adult_Historian_L4" s="TBD_INSTANCE_ID">
-  <T n="title">0xTBD_STBL_KEY_HC_LEVEL_4_TITLE</T>
-  <T n="title_description">0xTBD_STBL_KEY_HC_LEVEL_4_DESC</T>
-  <T n="simoleons_per_hour">30</T>
+<I c="CareerLevel" i="career_level" m="careers.career_tuning" n="career_level_Adult_Historian_L10" s="TBD_INSTANCE_ID">
+  <T n="title">0xTBD_STBL_KEY_HC_LEVEL_10_TITLE</T>
+  <T n="title_description">0xTBD_STBL_KEY_HC_LEVEL_10_DESC</T>
+  <T n="simoleons_per_hour">340</T>
 
   <T n="ideal_mood">14641</T>
 
@@ -23,13 +26,13 @@
     <L n="tested_metrics"/>
   </U>
 
-  <!-- Trainee hours: Mon-Fri 09:00-16:00 (duration=7h). -->
+  <!-- Prestige director hours: Tue-Fri 11:00-18:00 (duration=7h). -->
   <U n="work_schedule">
     <L n="schedule_entries">
       <U>
         <U n="days_available">
           <T n="0 SUNDAY">False</T>
-          <T n="1 MONDAY">True</T>
+          <T n="1 MONDAY">False</T>
           <T n="2 TUESDAY">True</T>
           <T n="3 WEDNESDAY">True</T>
           <T n="4 THURSDAY">True</T>
@@ -38,7 +41,7 @@
         </U>
         <T n="duration">7</T>
         <U n="start_time">
-          <T n="hour">9</T>
+          <T n="hour">11</T>
           <T n="minute">0</T>
         </U>
       </U>
@@ -46,9 +49,9 @@
   </U>
 
   <U n="wakeup_time">
-    <T n="hour">8</T>
+    <T n="hour">10</T>
     <T n="minute">0</T>
   </U>
 
-  <T n="aspiration">aspiration_career_Historian_L4</T>
+  <T n="aspiration">aspiration_career_Historian_L10</T>
 </I>

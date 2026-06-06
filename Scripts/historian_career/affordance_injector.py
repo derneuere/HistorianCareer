@@ -1,13 +1,17 @@
-# affordance_injector.py — adds the Historian career interactions to in-game computers
-# without requiring Scumbumbo's XML Injector as a dependency.
+# affordance_injector.py — adds the Historian career interactions to in-game
+# objects (computers + bookshelves) and Sims (social), without requiring
+# Scumbumbo's XML Injector as a dependency.
 #
 # How it works:
 #   1. We monkey-patch zone.Zone.do_zone_spin_up so that just before the first zone loads,
-#      we walk the loaded OBJECT and INTERACTION tunings and append our affordances to
-#      every "computer" object's _super_affordances tuple.
+#      we walk the loaded OBJECT and INTERACTION tunings and append our affordances to:
+#        - every "object_computer*" object's _super_affordances (computer affordances),
+#        - every "object_book*" object's _super_affordances (bookshelf affordances;
+#          Objektgeschichte also rides here per DESIGN open-Q#2),
+#        - the Sim class's _super_affordances (social affordances; best-effort).
 #   2. Appending (rather than replacing) means we co-exist with any other mod that touches
 #      the same objects — exactly the property XML Injector was added to provide.
-#   3. Injection is idempotent: a module-level flag prevents double-add on zone reloads.
+#   3. Injection is idempotent: module-level flags prevent double-add on zone reloads.
 #
 # Reference for the pattern: this mirrors what Scumbumbo's XML Injector does internally
 # (the public XML-Injector tunable wrapper is just sugar over this).
@@ -23,13 +27,47 @@ except Exception:
 
 MOD_NAME = "HistorianCareer"
 
-# The five Historian SuperInteractions we want on the computer.
+# Historian SuperInteractions grouped by injection SURFACE. Names are LAW per
+# _BUILD_SPEC.md slice C AFFORDANCES table. Each affordance is band-gated by
+# level_gate.py once installed; injection here just makes it *reachable* on the
+# right object/Sim. We deliberately inject the full set and let the per-Sim
+# band gate filter the pie menu, rather than gating by surface.
+
+# COMPUTER object affordances (the 5 existing + 4 new computer ones).
+_HC_COMPUTER_AFFORDANCE_NAMES = (
+    "HC_Interaction_TranscribeManuscript",   # existing, band 4-6
+    "HC_Interaction_AnalyzePrimarySource",   # existing, band 5-7
+    "HC_Interaction_PresentAtSymposium",     # existing, band 7-8
+    "HC_Interaction_HabilitationLecture",    # existing, band 8-9
+    "HC_Interaction_SuperviseDissertation",  # existing, band 9-10
+    "HC_Interaction_Blogeintrag",            # new, band 1-2
+    "HC_Interaction_Bildrechte",             # new, band 4-4
+    "HC_Interaction_OnlineFortbildung",      # new, band 4-4
+    "HC_Interaction_Drittmittel",            # new, band 10-10
+)
+
+# BOOKSHELF object affordances (new; injected via fuzzy "object_book" prefix).
+# Objektgeschichte ships on the bookshelf surface (DESIGN open-Q#2: no clean
+# museum-exhibit object to inject onto), framed as cataloguing.
+_HC_BOOKSHELF_AFFORDANCE_NAMES = (
+    "HC_Interaction_Objektgeschichte",       # new, band 2-2
+    "HC_Interaction_BuecherregalRecherche",  # new, band 3-9
+    "HC_Interaction_CrossReference",         # new, band 3-4
+)
+
+# SOCIAL affordances injected onto Sims (best-effort; see _inject_social_once).
+_HC_SOCIAL_AFFORDANCE_NAMES = (
+    "HC_Interaction_Zeitzeugen",             # new, band 4-8 (Elder target)
+    "HC_Interaction_DropHistoryFact",        # new overlay, band 1-10
+    "HC_Interaction_HistoricalJoke",         # new overlay, band 1-10
+)
+
+# All HC affordances we resolve from the INTERACTION manager. The level gate is
+# installed on whatever subset resolves; surface injection uses the groups above.
 _HC_AFFORDANCE_NAMES = (
-    "HC_Interaction_TranscribeManuscript",
-    "HC_Interaction_AnalyzePrimarySource",
-    "HC_Interaction_PresentAtSymposium",
-    "HC_Interaction_HabilitationLecture",
-    "HC_Interaction_SuperviseDissertation",
+    _HC_COMPUTER_AFFORDANCE_NAMES
+    + _HC_BOOKSHELF_AFFORDANCE_NAMES
+    + _HC_SOCIAL_AFFORDANCE_NAMES
 )
 
 # Computer object tunings to extend. Names confirmed against the live game's
@@ -49,7 +87,20 @@ _HC_COMPUTER_TUNINGS = (
 # is also treated as a computer. Catches future variants without code changes.
 _HC_COMPUTER_NAME_PREFIX_LOWER = "object_computer"
 
+# Bookshelf object tunings to extend. Confirmed against the live game's
+# CombinedTuning (object_bookshelf=14837, object_bookshelf_library=100180,
+# many object_bookcaseFloor*). We fuzzy-match the "object_book" prefix
+# (case-insensitive) exactly like the computer path so future bookcase
+# variants are caught without code changes.
+_HC_BOOKSHELF_NAME_PREFIX_LOWER = "object_book"
+
+# Sim object tuning name (the actor/target we attach social super-affordances
+# to). EA's Sim object tuning is "sim". We also fuzzy-match any object whose
+# name is exactly "sim" (case-insensitive) as a robustness fallback.
+_HC_SIM_TUNING_NAME_LOWER = "sim"
+
 _injected = False
+_social_injected = False
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +152,132 @@ def _log(msg):
 _log("=== affordance_injector module imported ===")
 
 
+def _tuning_name_candidates(obj_cls):
+    """Return the possible tuning-name strings carried by an object/Sim class.
+
+    The tuning name in Sims 4 is not reliably on a single attribute, so we
+    probe the same set the original computer-fuzzy path used."""
+    return (
+        getattr(obj_cls, "__name__", None),
+        getattr(obj_cls, "TUNING_NAME", None),
+        str(getattr(obj_cls, "__tuning_class_name__", "")),
+    )
+
+
+def _fuzzy_match_objects(obj_mgr, prefix_lower):
+    """Return the set of object tuning classes whose canonical name starts with
+    `prefix_lower` (case-insensitive). Mirrors the existing computer scan so the
+    bookshelf path behaves identically. Returns (matched_set, examined_count)."""
+    matched = set()
+    examined = 0
+    try:
+        all_types = list(obj_mgr.types.values()) if hasattr(obj_mgr, "types") else []
+        examined = len(all_types)
+        for obj_cls in all_types:
+            for n in _tuning_name_candidates(obj_cls):
+                if isinstance(n, str) and n.lower().startswith(prefix_lower):
+                    matched.add(obj_cls)
+                    break
+    except Exception as e:
+        _log(f"  Fuzzy lookup ({prefix_lower}) failed: {e}\n{traceback.format_exc()}")
+    return matched, examined
+
+
+def _append_affordances(target_objects, affordances, attr="_super_affordances"):
+    """Idempotently append `affordances` to each target's `attr` tuple.
+
+    Appending (not replacing) means we co-exist with other mods touching the
+    same objects. Returns the number of objects actually modified."""
+    if not affordances:
+        return 0
+    injected_into = 0
+    for obj_cls in target_objects:
+        existing = tuple(getattr(obj_cls, attr, ()))
+        to_add = tuple(a for a in affordances if a not in existing)
+        if not to_add:
+            continue
+        try:
+            setattr(obj_cls, attr, existing + to_add)
+            injected_into += 1
+        except Exception as e:
+            _log(f"  append to {getattr(obj_cls, '__name__', obj_cls)!r}.{attr} failed: {e}")
+    return injected_into
+
+
+def _resolve_sim_object_classes(obj_mgr):
+    """Best-effort: return the set of object-tuning classes that represent a Sim.
+
+    There is no single guaranteed accessor across patches, so we try, in order:
+      1. obj_mgr.get("sim") by name (works on managers that accept string keys).
+      2. The live Sim runtime class (sims.sim.Sim) — social super-affordances are
+         read from `Sim.super_affordances`, which resolves `_super_affordances`.
+      3. Fuzzy: any object tuning whose canonical name is exactly "sim"
+         (case-insensitive).
+    Any of these may yield nothing; the caller treats the social injection as
+    best-effort. Returns a set (possibly empty)."""
+    targets = set()
+    # 1. by-name lookup
+    if obj_mgr is not None:
+        try:
+            obj = obj_mgr.get(_HC_SIM_TUNING_NAME_LOWER)
+            if obj is not None:
+                targets.add(obj)
+                _log("  sim object: FOUND via obj_mgr.get('sim')")
+        except (ValueError, TypeError):
+            pass
+    # 2. live runtime Sim class (this is what actually serves the pie menu)
+    try:
+        from sims.sim import Sim as _SimClass
+        if _SimClass is not None:
+            targets.add(_SimClass)
+            _log("  sim object: added sims.sim.Sim runtime class")
+    except Exception as e:
+        _log(f"  sim object: sims.sim.Sim import failed: {e}")
+    # 3. fuzzy exact-name match
+    if obj_mgr is not None and hasattr(obj_mgr, "types"):
+        try:
+            for obj_cls in obj_mgr.types.values():
+                for n in _tuning_name_candidates(obj_cls):
+                    if isinstance(n, str) and n.lower() == _HC_SIM_TUNING_NAME_LOWER:
+                        targets.add(obj_cls)
+                        break
+        except Exception as e:
+            _log(f"  sim object: fuzzy scan failed: {e}")
+    return targets
+
+
+def _inject_social(obj_mgr, social_affordances):
+    """Attach the social super-affordances to Sims, best-effort.
+
+    Zeitzeugen (Elder target) + the two career-wide overlays (Drop a History
+    Fact / Historical Joke) are SocialSuperInteractions whose target is a Sim.
+    Adding them to the Sim's `_super_affordances` makes them reachable from the
+    Sim pie menu; the per-Sim band gate in level_gate.py then filters by rank.
+
+    This is explicitly BEST-EFFORT (DESIGN/_BUILD_SPEC): if no Sim class
+    resolves, we log and rely on the tuning-side HC_PieMenuCategory_Historian
+    pie-menu placement as the working fallback. Idempotent."""
+    global _social_injected
+    if _social_injected:
+        _log("  social already injected, skipping")
+        return
+    if not social_affordances:
+        _log("  No social affordances resolved; skipping social injection.")
+        return
+    sim_targets = _resolve_sim_object_classes(obj_mgr)
+    if not sim_targets:
+        _log("  Social injection BEST-EFFORT: no Sim class resolved — relying "
+             "on tuning-side pie-menu category fallback.")
+        return
+    n_social = _append_affordances(sim_targets, social_affordances)
+    _log(f"Injected {len(social_affordances)} social affordances into "
+         f"{n_social} Sim class(es).")
+    _social_injected = True
+
+
 def _inject_once():
-    """Walk the tuning managers and append our affordances to every computer object."""
+    """Walk the tuning managers and append our affordances to the right surfaces
+    (computer / bookshelf objects + Sims) and install the per-Sim level gate."""
     global _injected
     _log("_inject_once called")
     if _injected:
@@ -193,8 +368,9 @@ def _inject_once():
             _log(f"  registry enumeration failed: {e}\n{traceback.format_exc()}")
 
         # Resolve each affordance. Prefer registry lookup by name; fall back to
-        # the by-classname dictionary we just built.
-        affordances = []
+        # the by-classname dictionary we just built. We keep a name->class map so
+        # each surface (computer / bookshelf / social) can pull just its subset.
+        affordance_by_name = {}
         for name in _HC_AFFORDANCE_NAMES:
             aff = aff_mgr.get(name)
             if aff is None and name in registered_hc:
@@ -203,22 +379,41 @@ def _inject_once():
             else:
                 _log(f"  affordance {name}: {'FOUND' if aff is not None else 'MISSING'} via aff_mgr.get()")
             if aff is not None:
-                affordances.append(aff)
-        affordances = tuple(affordances)
+                affordance_by_name[name] = aff
+
+        def _resolve_group(names):
+            """Return the tuple of resolved affordance classes for a name group,
+            preserving order and skipping any that failed to resolve."""
+            return tuple(
+                affordance_by_name[n] for n in names if n in affordance_by_name
+            )
+
+        computer_affordances = _resolve_group(_HC_COMPUTER_AFFORDANCE_NAMES)
+        bookshelf_affordances = _resolve_group(_HC_BOOKSHELF_AFFORDANCE_NAMES)
+        social_affordances = _resolve_group(_HC_SOCIAL_AFFORDANCE_NAMES)
+        affordances = tuple(affordance_by_name.values())
         if not affordances:
             _log("  No affordances resolved; nothing to inject.")
             return
+        _log(
+            "  Resolved affordances: computer={} bookshelf={} social={}".format(
+                len(computer_affordances),
+                len(bookshelf_affordances),
+                len(social_affordances),
+            )
+        )
 
+        # ---- COMPUTER surface ------------------------------------------
         # 1. Allow-list lookup by name — wrap individually because the OBJECT
         #    manager (DefinitionManager) only accepts integer instance IDs,
         #    not name strings (unlike the INTERACTION manager). A string lookup
         #    raises ValueError. The fuzzy iteration below is the actual workhorse.
-        target_objects = set()
+        computer_objects = set()
         for obj_name in _HC_COMPUTER_TUNINGS:
             try:
                 obj = obj_mgr.get(obj_name)
                 if obj is not None:
-                    target_objects.add(obj)
+                    computer_objects.add(obj)
                     _log(f"  computer allow-list {obj_name}: FOUND (by name)")
             except (ValueError, TypeError):
                 # Expected for DefinitionManager. We'll find it via fuzzy iteration.
@@ -227,33 +422,14 @@ def _inject_once():
         # 2. Fuzzy fallback: any tuning whose canonical name starts with
         #    "object_computer" (case-insensitive). EA's actual names mix
         #    capitalisations (`object_computerLOW_01`, `object_Computer_Tesla`).
-        # NOTE: obj_mgr.types is a dict {ResourceKey -> class}. The class
-        # itself does NOT carry the tuning name as __name__; the tuning name
-        # lives elsewhere. Use the resource key's instance ID inverted via
-        # the manager's _id_to_obj_class or iterate get_ordered_types() if
-        # available. As a robust fallback, iterate the manager and try to
-        # extract the tuning name from instance.__name__ or instance.__tuning_name__.
-        fuzzy_total = 0
-        fuzzy_matched = 0
-        try:
-            all_types = list(obj_mgr.types.values()) if hasattr(obj_mgr, "types") else []
-            fuzzy_total = len(all_types)
-            for obj_cls in all_types:
-                # The tuning name in Sims 4 is on the class via several possible attrs.
-                name_candidates = (
-                    getattr(obj_cls, "__name__", None),
-                    getattr(obj_cls, "TUNING_NAME", None),
-                    str(getattr(obj_cls, "__tuning_class_name__", "")),
-                )
-                for n in name_candidates:
-                    if isinstance(n, str) and n.lower().startswith(_HC_COMPUTER_NAME_PREFIX_LOWER):
-                        target_objects.add(obj_cls)
-                        fuzzy_matched += 1
-                        break
-        except Exception as e:
-            _log(f"  Fuzzy lookup failed: {e}\n{traceback.format_exc()}")
-        _log(f"  Fuzzy scan: examined {fuzzy_total} object tunings, matched {fuzzy_matched}")
-        _log(f"  Total target_objects: {len(target_objects)}")
+        #    obj_mgr.types is a dict {ResourceKey -> class}; the tuning name is
+        #    on the class via __name__ / TUNING_NAME / __tuning_class_name__.
+        fuzzy_computers, fuzzy_total = _fuzzy_match_objects(
+            obj_mgr, _HC_COMPUTER_NAME_PREFIX_LOWER
+        )
+        computer_objects |= fuzzy_computers
+        _log(f"  Computer scan: examined {fuzzy_total} object tunings, "
+             f"fuzzy-matched {len(fuzzy_computers)}, total targets {len(computer_objects)}")
 
         # Sample what __name__ actually looks like on a few of these so we know
         # whether our fuzzy filter is even looking at the right attribute.
@@ -263,23 +439,39 @@ def _inject_once():
                 _log(f"  sample obj class: __name__={getattr(cls,'__name__',None)!r} "
                      f"TUNING_NAME={getattr(cls,'TUNING_NAME',None)!r}")
 
-        injected_into = 0
-        for obj_cls in target_objects:
-            existing = tuple(getattr(obj_cls, "_super_affordances", ()))
-            if all(a in existing for a in affordances):
-                continue
-            obj_cls._super_affordances = existing + tuple(
-                a for a in affordances if a not in existing
-            )
-            injected_into += 1
+        n_comp = _append_affordances(computer_objects, computer_affordances)
+        _log(f"Injected {len(computer_affordances)} affordances into "
+             f"{n_comp} computer objects.")
 
-        _log(f"Injected {len(affordances)} affordances into {injected_into} computer objects.")
+        # ---- BOOKSHELF surface -----------------------------------------
+        # Mirror the computer fuzzy path exactly: any object tuning whose name
+        # starts with "object_book" (object_bookshelf, object_bookshelf_library,
+        # object_bookcaseFloor*, ...). Objektgeschichte rides here too (DESIGN
+        # open-Q#2: no clean museum-exhibit object to inject onto).
+        bookshelf_objects, book_total = _fuzzy_match_objects(
+            obj_mgr, _HC_BOOKSHELF_NAME_PREFIX_LOWER
+        )
+        _log(f"  Bookshelf scan: examined {book_total} object tunings, "
+             f"fuzzy-matched {len(bookshelf_objects)}")
+        n_book = _append_affordances(bookshelf_objects, bookshelf_affordances)
+        _log(f"Injected {len(bookshelf_affordances)} affordances into "
+             f"{n_book} bookshelf objects.")
+
+        # ---- SOCIAL surface (best-effort) ------------------------------
+        # Attach the social super-affordances (Zeitzeugen + the 2 overlays) to
+        # the Sim object's _super_affordances. This is best-effort: if no Sim
+        # tuning resolves we log and move on (the tuning-side pie-menu category
+        # remains the working fallback). See _inject_social.
+        try:
+            _inject_social(obj_mgr, social_affordances)
+        except Exception as e:
+            _log(f"  Social injection error: {e}\n{traceback.format_exc()}")
 
         # Issue #26 — per-Sim career-level gating. The XML test_globals path
         # silently failed (commit bc530fd / revert 05bff8a), so the gate lives
         # in level_gate.py and patches each HC_Interaction_*'s `_test`
         # classmethod. We share this hook because the affordance classes are
-        # already resolved (`affordances` tuple) and the career/track managers
+        # already resolved (`affordance_by_name`) and the career/track managers
         # are guaranteed loaded by zone-spin-up time.
         #
         # NOTE: Not all Sims 4 instance managers honour `mgr.get(name)` for
@@ -320,9 +512,9 @@ def _inject_once():
                     "— affordances remain ungated for this session."
                 )
             else:
-                affordance_by_name = {
-                    getattr(a, "__name__", None): a for a in affordances
-                }
+                # affordance_by_name is keyed by tuning name; install_level_gates
+                # pulls exactly the names present in _LEVEL_REQUIREMENTS and
+                # leaves any others ungated.
                 n = install_level_gates(affordance_by_name, career_cls, track_cls, log=_log)
                 _log(f"  Level gates installed on {n} HC_Interaction_* classes.")
         except Exception as e:

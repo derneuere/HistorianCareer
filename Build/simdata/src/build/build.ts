@@ -103,8 +103,17 @@ export function buildSimData(
   // appear in the Schemas array.
   const schemas = Array.from(ctx.schemaCache.values());
 
+  // SimData binary format version. EA's pre-patch base game emits 0x100, which
+  // the C++ engine accepts for the career/level/etc. classes (verified loading
+  // in-game, v0.4.0). The 1.124.55 PATCH bumped AspirationTrack to 0x101 (see
+  // base/Preload's Track_Knowledge_A) and the brittle Olympus AS3 client reads
+  // that resource; emit 0x101 for AspirationTrack so our resource is
+  // byte-identical to what the running game ships (issue #24 fix). Other
+  // classes stay at 0x100 to remain byte-identical to their verified goldens.
+  const version = schema.className === "AspirationTrack" ? 0x101 : 0x100;
+
   return Object.freeze({
-    version: 0x100,
+    version,
     unused: 0,
     schemas,
     instances: [instance],

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  L1 daily tasks: HiWi work.
+  L1 daily-task pool: Hobbyhistoriker:in.
+  Pool (DESIGN ten-rank map): Blogeintrag, Sachbuch, Museum.
+  Museum has no dedicated objective -> folded into ReadNonfictionBook per spec.
 
   AspirationCareer's display name/description live under an `_display_data`
   variant in EA's TDESC, not at root; EA's own AspirationCareer goldens omit
@@ -33,7 +35,7 @@
 <I c="AspirationCareer" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_career_Historian_L1" s="TBD_INSTANCE_ID">
   <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
   <L n="objectives">
-    <T>objective_HC_RunTranscribeManuscript_x2</T>
+    <T>objective_HC_RunBlogeintrag</T>
     <T>objective_HC_ReadNonfictionBook</T>
   </L>
 </I>

@@ -1,4 +1,4 @@
-# level_gate.py — per-Sim level-gating for the five HC SuperInteractions.
+# level_gate.py — per-Sim level-BAND gating for the HC SuperInteractions.
 #
 # WHY THIS EXISTS
 #
@@ -37,14 +37,33 @@
 #   it shares the existing zone-spinup hook and the same already-resolved
 #   affordance class objects. No second monkey-patch site.
 
-# Required Historian user_level (1-indexed) per HC affordance. Matches the
-# career_level tuning progression: L1 Research Assistant -> L5 Full Professor.
+# Per-affordance level BAND (min, max), inclusive, 1-indexed user_level.
+# The gate returns False when user_level < min OR user_level > max, so an
+# affordance is only offered inside its narrative rank band. Bands are LAW
+# per _BUILD_SPEC.md slice C AFFORDANCES table (and Docs/DESIGN.md ten-rank map).
+#
+# The 5 EXISTING affordances are RE-BANDED here (they used to be flat min-only
+# gates 1..5). The new affordances are added with their spec bands.
 _LEVEL_REQUIREMENTS = {
-    "HC_Interaction_TranscribeManuscript":  1,  # L1+ Research Assistant
-    "HC_Interaction_AnalyzePrimarySource":  2,  # L2+ PhD Candidate
-    "HC_Interaction_PresentAtSymposium":    3,  # L3+ Postdoc
-    "HC_Interaction_HabilitationLecture":   4,  # L4+ Junior Prof
-    "HC_Interaction_SuperviseDissertation": 5,  # L5+ Full Prof (W3)
+    # --- 5 existing affordances, re-banded -------------------------------
+    "HC_Interaction_TranscribeManuscript":  (4, 6),
+    "HC_Interaction_AnalyzePrimarySource":  (5, 7),
+    "HC_Interaction_PresentAtSymposium":    (7, 8),
+    "HC_Interaction_HabilitationLecture":   (8, 9),
+    "HC_Interaction_SuperviseDissertation": (9, 10),
+    # --- new computer affordances ----------------------------------------
+    "HC_Interaction_Blogeintrag":           (1, 2),
+    "HC_Interaction_Bildrechte":            (4, 4),
+    "HC_Interaction_OnlineFortbildung":     (4, 4),
+    "HC_Interaction_Drittmittel":           (10, 10),
+    # --- new bookshelf affordances ---------------------------------------
+    "HC_Interaction_Objektgeschichte":      (2, 2),
+    "HC_Interaction_BuecherregalRecherche": (3, 9),
+    "HC_Interaction_CrossReference":        (3, 4),
+    # --- new social affordances ------------------------------------------
+    "HC_Interaction_Zeitzeugen":            (4, 8),
+    "HC_Interaction_DropHistoryFact":       (1, 10),
+    "HC_Interaction_HistoricalJoke":        (1, 10),
 }
 
 
@@ -56,8 +75,9 @@ def _gated_test(cls, target, context, **kwargs):
       - Identity-compare `current_track_tuning` to ensure the Sim is on our
         career track (not a re-imagined branch — we only have one track today,
         but the check costs nothing and future-proofs the gate).
-      - Compare `career.user_level` against the per-class minimum stored on
-        `cls._hc_min_user_level`.
+      - Compare `career.user_level` against the per-class band stored on
+        `cls._hc_min_user_level` / `cls._hc_max_user_level` (inclusive). The
+        affordance is offered only when min <= user_level <= max.
     Any failure returns `TestResult(False, ...)` so the affordance is filtered
     out of the pie menu without raising.
 
@@ -92,12 +112,22 @@ def _gated_test(cls, target, context, **kwargs):
     if career.current_track_tuning is not cls._hc_required_track:
         return TestResult(False, "Sim is on a different Historian track.")
 
-    if career.user_level < cls._hc_min_user_level:
+    user_level = career.user_level
+    if user_level < cls._hc_min_user_level:
         return TestResult(
             False,
-            "Requires Historian level {} (Sim is at {}).",
+            "Requires Historian level {}-{} (Sim is at {}).",
             cls._hc_min_user_level,
-            career.user_level,
+            cls._hc_max_user_level,
+            user_level,
+        )
+    if user_level > cls._hc_max_user_level:
+        return TestResult(
+            False,
+            "Only available at Historian level {}-{} (Sim is at {}).",
+            cls._hc_min_user_level,
+            cls._hc_max_user_level,
+            user_level,
         )
 
     return TestResult.TRUE
@@ -106,9 +136,9 @@ def _gated_test(cls, target, context, **kwargs):
 def install_level_gates(affordance_by_name, career_cls, required_track_cls, log=None):
     """Patch `_test` on each HC_Interaction_* tuning class.
 
-    affordance_by_name: dict[str, type] — the 5 HC_Interaction_* tuning
+    affordance_by_name: dict[str, type] — the HC_Interaction_* tuning
         classes keyed by tuning name. Caller (affordance_injector) already
-        resolved these.
+        resolved these. Any name not in `_LEVEL_REQUIREMENTS` is left ungated.
     career_cls:         the `career_Adult_Historian` tuning class.
     required_track_cls: the `career_track_Adult_Historian` tuning class.
     log:                optional callable for diagnostic lines; receives a
@@ -128,11 +158,13 @@ def install_level_gates(affordance_by_name, career_cls, required_track_cls, log=
         return 0
 
     installed = 0
-    for name, min_level in _LEVEL_REQUIREMENTS.items():
+    for name, band in _LEVEL_REQUIREMENTS.items():
         cls = affordance_by_name.get(name)
         if cls is None:
             continue
+        min_level, max_level = band
         cls._hc_min_user_level = min_level
+        cls._hc_max_user_level = max_level
         cls._hc_required_track = required_track_cls
         cls._hc_career_uid = career_uid
         cls._test = classmethod(_gated_test)
@@ -140,6 +172,8 @@ def install_level_gates(affordance_by_name, career_cls, required_track_cls, log=
         installed += 1
         if log:
             log(
-                "  gated {} -> requires user_level >= {}".format(name, min_level)
+                "  gated {} -> user_level band [{}, {}]".format(
+                    name, min_level, max_level
+                )
             )
     return installed
