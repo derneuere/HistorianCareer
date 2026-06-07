@@ -156,6 +156,31 @@ are repeatable and never clobber player saves), and a configurable
 `host/sims4ctl/automation_config.json` of click targets. Full write-up:
 [`docs/RECIPE_B.md`](docs/RECIPE_B.md).
 
+### HistorianCareer verification scenarios
+
+The sibling `HistorianCareer` mod ships two scenarios under `scenarios/` (the
+bridge/CLI stay mod-agnostic; only these files know about the mod):
+
+| Scenario | Game needed? | What it verifies |
+|----------|:------------:|------------------|
+| `historian_offline_check` | **no** | Static authoring check: parses the mod's tuning XML + script gates and asserts they encode the documented ten-rank spec (pay schedule, DU fast-track, the 5 skill-gated promotions, the 15 affordance/overlay level bands, the aspiration track + Habilitation Renown reward trait, WFH). A fast, CI-friendly regression guard. |
+| `historian_career` | **yes** | End-to-end in-game checks for the same features against a loaded save: career add + pay climb, fast-track to L5, each skill gate blocking-then-opening, the installed affordance bands, the aspiration reward trait, and WFH/daily-rotation — plus a "no new UI exceptions" gate. Runs the offline check first as a preflight. |
+
+```
+python scenarios/historian_offline_check.py          # no game required
+sims4ctl run-scenario historian_offline_check        # same, via the CLI
+sims4ctl run-scenario historian_career --auto        # launch+load, then verify in-game
+```
+
+All three are the single source of truth in `scenarios/historian_spec.py`, so the
+offline and live checks can never silently drift. **In-game mutations go through
+the game's Python API via the bridge `eval`/`exec` verb, never cheat commands** —
+EA cheats silently no-op for a custom career (`careers.add_career
+career_Adult_Historian` resolves nothing), so the scenario constructs the career
+class and calls `career_tracker.add_career(...)` / `promote_career()` /
+`get_statistic(...).set_user_value(...)` directly, then re-reads live state and
+asserts on what it observed.
+
 ### State topics
 
 | Topic    | Shape |

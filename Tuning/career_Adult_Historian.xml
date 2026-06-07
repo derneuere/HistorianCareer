@@ -43,7 +43,7 @@
 
     To REQUIRE skill >= N at a specific transition, a group =
       [career_level test for the FROM level] AND
-      [skill test that passes only when skill is BELOW N -> max_value = N-1].
+      [skill_test that passes only when skill is BELOW N -> skill_range upper_bound = N-1].
     A multi-skill AND requirement (e.g. Writing>=2 AND Charisma>=1) is encoded
     as TWO groups for the same FROM level (one per skill), since being below
     EITHER skill must block the promotion.
@@ -52,8 +52,14 @@
     Locked gates per DESIGN: L1->L2, L6->L7, L7->L8, L8->L9, L9->L10.
     The intermediate L2->L3..L5->L6 promotions are performance-only (no gate).
 
-    NOTE: block_promotion_tests are only truly verifiable in-game; implemented
-    per the spec's documented logic and flagged for an in-game pass.
+    SKILL-TEST SHAPE (issue #32 in-game pass): the EA skill test variant is
+    `skill_test` (NOT `skill`), and the threshold is a `skill_range` interval
+    with an `upper_bound`, mirroring EA's own career-interaction tuning. The
+    earlier `V t=skill / U n=skill / T n=max_value` form did NOT resolve
+    in-game: the tuning loader fell back to the no-op `none` test, so every
+    gate silently passed through and `Career.is_promotion_blocked` raised
+    `'str' object has no attribute 'expected_kwargs'` whenever a gated level was
+    active. Verified live via sims4ctl after switching to `skill_test`.
   -->
   <L n="block_promotion_tests">
     <!-- L1->L2: Writing >= 2 (block while Writing <= 1 at L1). -->
@@ -67,10 +73,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">1</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">16714</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">1</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
@@ -85,10 +97,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">0</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">16699</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">0</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
@@ -103,10 +121,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">6</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">221014</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">6</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
@@ -121,10 +145,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">6</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">16714</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">6</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
@@ -139,10 +169,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">9</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">221014</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">9</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
@@ -157,10 +193,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">9</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">16714</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">9</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
@@ -175,10 +217,16 @@
           </V>
         </U>
       </V>
-      <V t="skill">
-        <U n="skill">
-          <T n="max_value">4</T>
+      <V t="skill_test">
+        <U n="skill_test">
           <T n="skill">16699</T>
+          <V n="skill_range" t="interval">
+            <U n="interval">
+              <U n="skill_interval">
+                <T n="upper_bound">4</T>
+              </U>
+            </U>
+          </V>
         </U>
       </V>
     </L>
