@@ -1,46 +1,64 @@
 #!/usr/bin/env python3
-"""historian_career.py -- end-to-end example scenario for sims4ctl.
+"""historian_career.py -- end-to-end in-game verification of the ten-rank
+Historian career, driven from outside the game through the sims4ctl bridge.
 
-Drives the sims4ctl HOST client against a RUNNING The Sims 4 to test the
-HistorianCareer mod from outside the game. This is the worked example the
-_BUILD_SPEC.md promises: it walks the Historian career L1..L10, exercises the
-Discover-University fast-track, pokes a skill gate, adds the aspiration track,
-and finally asserts the run produced no NEW UI exceptions.
+This is the worked example `_BUILD_SPEC.md` promises, and the scripted answer to
+issue #32 ("verify remaining 10-rank Historian features in-game"). It exercises,
+against a RUNNING Sims 4 with a loaded save:
+
+  * career add at L1 + the exact §/h pay schedule L1..L10,
+  * the Discover-University fast-track (degree trait -> start at L5),
+  * ALL FIVE skill-gated promotions (L1->L2, L6->L7, L7->L8, L8->L9, L9->L10) --
+    both that they BLOCK below the threshold and OPEN at it,
+  * the 15 affordance/overlay level bands installed by level_gate.py,
+  * the "Historian's Calling" aspiration track granting the Habilitation Renown
+    reward trait,
+  * Work-From-Home + the daily-task rotation stash,
+  * and that the whole run produced no new UI exceptions.
+
+WHY THE PYTHON API, NOT CHEATS (issue #30)
+------------------------------------------
+EA cheat commands run through the bridge `cmd` verb silently no-op for our custom
+career -- `careers.add_career career_Adult_Historian` resolves nothing, so the old
+cheat-driven scenario failed at the very first step. The reliable channel is the
+game's own Python API, reached through the bridge `eval`/`exec` verb (proven
+in-game in #30). Every mutation below therefore runs as a small Python snippet
+ON THE MAIN THREAD via the bridge, using `hc.active_sim_info()` and the live
+`services` managers -- never a cheat string. Each snippet then RE-READS live
+state and the step asserts on what it observed, so a wrong assumption fails
+loudly instead of passing silently.
 
 PREREQUISITES (this script CANNOT create them -- there is no headless mode):
-  1. The Sims 4 (patch 1.124.55) is RUNNING.
-  2. A save is LOADED with an active adult Sim in a loaded zone (not CAS/Build,
-     not paused on a modal) -- the bridge can only touch `services` on the main
-     thread during normal play.
-  3. The sims4ctl in-game bridge is INSTALLED (build + copy to <MODS>/sims4ctl/;
-     see `sims4ctl install`) and the game has been (re)launched so it loaded.
-  4. The HistorianCareer mod (.package + .ts4script) is installed and loaded, so
-     `careers.add_career career_Adult_Historian` resolves.
-  5. `testingcheats true` is allowed (this script enables it first).
+  1. The Sims 4 is RUNNING with the sims4ctl bridge installed (`sims4ctl install`,
+     script mods enabled, game restarted) and a save LOADED with an active adult
+     Sim in a loaded zone (not CAS/Build, not paused on a modal).
+  2. The HistorianCareer mod (.package + .ts4script) is installed and loaded.
 
 Run it:
-    python scenarios/historian_career.py
-    python scenarios/historian_career.py --userdata "C:/path/to/The Sims 4"
+    sims4ctl run-scenario historian_career --auto      # bootstraps load
+    python scenarios/historian_career.py               # against an already-loaded save
+    python scenarios/historian_career.py --no-offline  # skip the authoring preflight
 
-Exit code is 0 only when EVERY assertion passes; non-zero otherwise, so a CI
-job or agent can gate on it. A clear PASS/FAIL summary is printed at the end.
+Exit code is 0 only when EVERY check passes; non-zero otherwise, so CI/an agent
+can gate on it. The authoring half (no game needed) is also runnable on its own:
+    python scenarios/historian_offline_check.py
 
-This script talks ONLY through the documented host client (client.Client +
-crashwatch.CrashWatch + gamepaths) -- it imports nothing from the in-game
-bridge. Stdlib + the host package only.
+Talks ONLY through the documented host client (client.Client + crashwatch +
+gamepaths) and the shared spec / offline checker. Stdlib + the host package only.
 """
 
 import argparse
+import json
 import os
 import sys
 import time
 
-# --- make the host package importable (sys.path -> <repo>/host) -------------
-# scenarios/historian_career.py  ->  ../host
+# --- make the host package + sibling scenario modules importable ------------
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _HOST_DIR = os.path.join(os.path.dirname(_HERE), "host")
-if _HOST_DIR not in sys.path:
-    sys.path.insert(0, _HOST_DIR)
+for _p in (_HERE, _HOST_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 try:
     from sims4ctl import gamepaths
@@ -49,162 +67,108 @@ try:
 except ImportError as exc:  # pragma: no cover - surfaced as a clear failure
     sys.stderr.write(
         "FATAL: could not import the sims4ctl host package from {0}\n"
-        "       ({1})\n"
-        "       Make sure the host slice exists under host/sims4ctl/.\n".format(
-            _HOST_DIR, exc
-        )
+        "       ({1})\n".format(_HOST_DIR, exc)
     )
     sys.exit(2)
 
-
-# ---------------------------------------------------------------------------
-# Domain facts (LAW per HistorianCareer tuning, cross-checked against
-# Tuning/career_level_Adult_Historian_L*.xml and the mod README).
-# ---------------------------------------------------------------------------
-
-CAREER_NAME = "career_Adult_Historian"
-
-# English titles per rank (1-indexed). From historian_career.py TIERS table.
-TITLES = {
-    1: "Hobby Historian",
-    2: "Museum Attendant",
-    3: "Intern",
-    4: "Trainee",
-    5: "Research Assistant (HiWi)",
-    6: "PhD Candidate",
-    7: "Postdoctoral Researcher",
-    8: "Junior Professor",
-    9: "Full Professor",
-    10: "Institute Director",
-}
-
-# simoleons_per_hour per rank (1-indexed). EXACT tuning values -- note this is
-# NOT strictly monotonic: L2=22 (part-time, longer hours) dips to L3=18 (intern)
-# before climbing. We assert the exact schedule, not "always increasing".
-PAY = {
-    1: 14, 2: 22, 3: 18, 4: 30, 5: 40,
-    6: 60, 7: 90, 8: 140, 9: 220, 10: 340,
-}
-
-# Discover University fast-track: holding 230331 (trait_University_DegreeTraits_
-# History) gives +4 start-level, so a degree holder begins at L5 instead of L1.
-HISTORY_DEGREE_TRAIT = "trait_University_DegreeTraits_History"
-FAST_TRACK_START_LEVEL = 5
-
-# Skill gate around L8->L9: the two University major skills the career checks.
-SKILL_WRITING = "Major_Writing"
-SKILL_RESEARCH_DEBATE = "Major_ResearchDebate"
-
-ASPIRATION_TRACK = "aspiration_track_HistorianCalling"
+import historian_spec as spec  # noqa: E402
+from historian_offline_check import Harness, run_offline_checks  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# A tiny PASS/FAIL harness. Records every check; never aborts the whole run on
-# a single failed assertion (so one bad rank doesn't hide the rest), but DOES
-# abort a step on an infrastructure error (timeout / bridge error) since the
-# rest of that step can't meaningfully proceed.
+# In-game preamble: resolver helpers re-defined on EVERY exec call (the bridge
+# builds a fresh eval namespace per request, so nothing persists between calls).
+# Exposed namespace already has `services`, `sims4`, `hc`. We add `Types`,
+# the resolver helpers, and `SI` (the active sim_info).
 # ---------------------------------------------------------------------------
 
-class Harness(object):
-    def __init__(self):
-        self.checks = []  # list of (ok: bool, label: str, detail: str)
+_RESULT_MARKER = "<<S4CTL_RESULT>>"
 
-    def check(self, ok, label, detail=""):
-        self.checks.append((bool(ok), label, detail))
-        mark = "PASS" if ok else "FAIL"
-        line = "  [{0}] {1}".format(mark, label)
-        if detail:
-            line += "  -- {0}".format(detail)
-        print(line)
-        return bool(ok)
+_IN_GAME_PREAMBLE = '''
+import json
+from sims4.resources import Types
+_S = "%s"
 
-    def eq(self, got, want, label):
-        return self.check(
-            got == want, label, "got {0!r}, want {1!r}".format(got, want)
-        )
+def _mgr(t):
+    return services.get_instance_manager(t)
 
-    @property
-    def failed(self):
-        return [c for c in self.checks if not c[0]]
-
-    def summary(self):
-        total = len(self.checks)
-        nfail = len(self.failed)
-        npass = total - nfail
-        print("")
-        print("=" * 60)
-        if nfail == 0:
-            print("OVERALL: PASS  ({0}/{0} checks)".format(total))
-        else:
-            print("OVERALL: FAIL  ({0}/{1} checks passed)".format(npass, total))
-            print("Failed checks:")
-            for ok, label, detail in self.failed:
-                print("  - {0}  ({1})".format(label, detail))
-        print("=" * 60)
-        return nfail == 0
-
-
-# ---------------------------------------------------------------------------
-# Bridge helpers built on the host Client.
-# ---------------------------------------------------------------------------
-
-class Driver(object):
-    """Thin convenience layer over client.Client for the scenario's verbs."""
-
-    def __init__(self, client, timeout):
-        self.client = client
-        self.timeout = timeout
-
-    def cmd(self, command):
-        """Run a cheat via the bridge `cmd` verb. Returns the result dict."""
-        return self.client.send("cmd", {"command": command}, timeout=self.timeout)
-
-    def career_state(self):
-        """Return the list of the active sim's careers (each a dict with
-        name/user_level/simoleons_per_hour/track/title_stbl)."""
-        result = self.client.send(
-            "state", {"topic": "career"}, timeout=self.timeout
-        )
-        # Per the spec the career topic yields a list. Some bridge builds may
-        # wrap it as {"career": [...]} -- accept either shape defensively.
-        if isinstance(result, dict) and "career" in result:
-            result = result["career"]
-        if not isinstance(result, list):
-            return []
-        return result
-
-    def historian_entry(self):
-        """Return the Historian career dict from the live career state, or None.
-
-        Matches on the career `name` (the tuning name `career_Adult_Historian`)
-        with a fuzzy fallback on any name containing 'Historian'."""
-        careers = self.career_state()
-        for c in careers:
-            if not isinstance(c, dict):
-                continue
-            if c.get("name") == CAREER_NAME:
+def _by_name(mgr, name):
+    if mgr is None:
+        return None
+    try:
+        c = mgr.get(name)
+        if c is not None:
+            return c
+    except Exception:
+        pass
+    try:
+        for c in mgr.types.values():
+            if getattr(c, "__name__", "") == name:
                 return c
-        for c in careers:
-            if isinstance(c, dict) and "historian" in str(c.get("name", "")).lower():
-                return c
+    except Exception:
+        pass
+    return None
+
+def _career_cls():
+    return _by_name(_mgr(Types.CAREER), "career_Adult_Historian")
+
+def _hist_career(si):
+    cls = _career_cls()
+    if cls is None or si is None:
+        return None
+    try:
+        return si.career_tracker.get_career_by_uid(cls.guid64)
+    except Exception:
         return None
 
-    def historian_level_pay(self):
-        """Return (user_level, simoleons_per_hour, title_stbl) for the Historian
-        career, or (None, None, None) if it isn't present."""
-        entry = self.historian_entry()
-        if entry is None:
-            return None, None, None
-        return (
-            entry.get("user_level"),
-            entry.get("simoleons_per_hour"),
-            entry.get("title_stbl"),
-        )
+def _stat_cls(guid):
+    try:
+        return _mgr(Types.STATISTIC).get(guid)
+    except Exception:
+        return None
 
+def _trait_cls(key):
+    mgr = _mgr(Types.TRAIT)
+    if mgr is None:
+        return None
+    if isinstance(key, int):
+        try:
+            c = mgr.get(key)
+            if c is not None:
+                return c
+        except Exception:
+            pass
+        return None
+    return _by_name(mgr, key)
 
-# ---------------------------------------------------------------------------
-# scenario steps
-# ---------------------------------------------------------------------------
+def _track_cls(name):
+    return _by_name(_mgr(Types.ASPIRATION_TRACK), name)
+
+def _user_level(si):
+    c = _hist_career(si)
+    if c is None:
+        return None
+    try:
+        return int(c.user_level)
+    except Exception:
+        return None
+
+def _has_trait(si, key):
+    cls = _trait_cls(key)
+    if cls is None or si is None:
+        return False
+    try:
+        return bool(si.has_trait(cls))
+    except Exception:
+        pass
+    try:
+        return bool(si.trait_tracker.has_trait(cls))
+    except Exception:
+        return False
+
+SI = hc.active_sim_info()
+''' % _RESULT_MARKER
+
 
 def _as_int(v):
     try:
@@ -213,9 +177,338 @@ def _as_int(v):
         return None
 
 
+# ---------------------------------------------------------------------------
+# Driver: a thin convenience layer over client.Client. Mutations + special
+# reads go through the bridge `eval`/`exec` verb (Python API); the plain career
+# topic read uses the proven `state` verb.
+# ---------------------------------------------------------------------------
+
+class Driver(object):
+    def __init__(self, client, timeout):
+        self.client = client
+        self.timeout = timeout
+
+    # -- in-game exec primitive ---------------------------------------------
+
+    @staticmethod
+    def build_code(body, params=None):
+        """Assemble the full in-game snippet: preamble + literal params + body +
+        the RESULT print. Kept separate from _run so the snippet can be
+        syntax-checked offline (the live game is the only place name resolution
+        can be checked). `params` is a dict of {NAME: literal} injected as
+        assignments so we never string-format Python into the body."""
+        pre = ""
+        if params:
+            for k, v in params.items():
+                pre += "{0} = {1}\n".format(k, repr(v))
+        return (
+            _IN_GAME_PREAMBLE + "\n" + pre + body + "\n"
+            + "print(_S + json.dumps(RESULT, default=str))"
+        )
+
+    def _run(self, body, params=None):
+        """Exec a Python `body` in-game (preamble prepended). `body` must set a
+        variable `RESULT` to a JSON-able value, which is returned here."""
+        code = self.build_code(body, params)
+        out = self.client.send(
+            "eval", {"code": code, "mode": "exec"}, timeout=self.timeout)
+        stdout = out.get("stdout", "") if isinstance(out, dict) else ""
+        for line in (stdout or "").splitlines():
+            if line.startswith(_RESULT_MARKER):
+                return json.loads(line[len(_RESULT_MARKER):])
+        raise BridgeError(
+            "in-game exec returned no RESULT (stdout={0!r})".format(stdout))
+
+    # -- reads ---------------------------------------------------------------
+
+    def career_state(self):
+        result = self.client.send(
+            "state", {"topic": "career"}, timeout=self.timeout)
+        if isinstance(result, dict) and "career" in result:
+            result = result["career"]
+        return result if isinstance(result, list) else []
+
+    def historian_entry(self):
+        for c in self.career_state():
+            if isinstance(c, dict) and c.get("name") == spec.CAREER_NAME:
+                return c
+        for c in self.career_state():
+            if isinstance(c, dict) and "historian" in str(c.get("name", "")).lower():
+                return c
+        return None
+
+    def historian_level_pay(self):
+        entry = self.historian_entry()
+        if entry is None:
+            return None, None
+        return _as_int(entry.get("user_level")), _as_int(entry.get("simoleons_per_hour"))
+
+    def has_trait(self, key):
+        return bool(self._run('RESULT = {"has": _has_trait(SI, KEY)}',
+                              {"KEY": key}).get("has"))
+
+    # -- mutations (Python API, never cheats) -------------------------------
+
+    def add_career(self):
+        body = '''
+cls = _career_cls()
+if cls is not None and SI is not None and _hist_career(SI) is None:
+    try:
+        SI.career_tracker.add_career(cls(SI))
+    except Exception:
+        pass
+RESULT = {"level": _user_level(SI), "present": _hist_career(SI) is not None}
+'''
+        return self._run(body)
+
+    def remove_career(self):
+        body = '''
+cls = _career_cls()
+if cls is not None and SI is not None and _hist_career(SI) is not None:
+    try:
+        SI.career_tracker.remove_career(cls.guid64)
+    except Exception:
+        pass
+RESULT = {"present": _hist_career(SI) is not None}
+'''
+        return self._run(body)
+
+    def promote_once(self):
+        """Natural, gate-respecting promote via the Python API. Returns
+        {before, after, error}. Does NOT use the force-cheat, so a real gate can
+        actually stop it (that's the point of the gate test)."""
+        body = '''
+c = _hist_career(SI)
+before = _user_level(SI)
+err = None
+if c is not None:
+    try:
+        c.promote_career()
+    except Exception as e:
+        err = repr(e)
+RESULT = {"before": before, "after": _user_level(SI), "error": err}
+'''
+        return self._run(body)
+
+    def set_skill(self, guid, level):
+        body = '''
+cls = _stat_cls(GUID)
+applied = None
+if cls is not None and SI is not None:
+    try:
+        st = SI.get_statistic(cls, add=True)
+        try:
+            st.set_user_value(LEVEL)
+        except Exception:
+            try:
+                st.set_value(LEVEL)
+            except Exception:
+                pass
+        try:
+            applied = int(st.get_user_value())
+        except Exception:
+            applied = None
+    except Exception:
+        pass
+RESULT = {"guid": GUID, "want": LEVEL, "applied": applied}
+'''
+        return self._run(body, {"GUID": guid, "LEVEL": level})
+
+    def set_skills(self, mapping):
+        """Set several skills {guid: level}; returns {guid: applied}."""
+        out = {}
+        for guid, level in mapping.items():
+            out[guid] = self.set_skill(guid, level).get("applied")
+        return out
+
+    def set_trait(self, key, present):
+        body = '''
+cls = _trait_cls(KEY)
+if cls is not None and SI is not None:
+    try:
+        if PRESENT:
+            SI.add_trait(cls)
+        else:
+            SI.remove_trait(cls)
+    except Exception:
+        pass
+RESULT = {"has": _has_trait(SI, KEY)}
+'''
+        return self._run(body, {"KEY": key, "PRESENT": bool(present)})
+
+    def set_aspiration_track(self, name):
+        body = '''
+cls = _track_cls(NAME)
+err = None
+applied = False
+if cls is not None and SI is not None:
+    tr = getattr(SI, "aspiration_tracker", None)
+    if tr is not None:
+        for meth in ("set_aspiration_track", "set_aspiration"):
+            fn = getattr(tr, meth, None)
+            if callable(fn):
+                try:
+                    fn(cls)
+                    applied = True
+                    break
+                except Exception as e:
+                    err = repr(e)
+RESULT = {"applied": applied, "has_reward_trait": _has_trait(SI, REWARD), "error": err}
+'''
+        return self._run(body, {"NAME": name, "REWARD": spec.REWARD_TRAIT_NAME})
+
+    # -- gate / affordance probes -------------------------------------------
+
+    def promotion_blocked(self):
+        """Evaluate the career's `block_promotion_tests` against the live Sim at
+        its current level. Returns {blocked, note, level}. `blocked` is True when
+        a gate group passes (EA: any group passing -> promotion blocked). This is
+        the AUTHORITATIVE gate signal -- independent of whether promote_career()
+        happens to honour the gate."""
+        body = '''
+cls = _career_cls()
+blocked = None
+note = None
+if cls is not None and SI is not None:
+    tests = getattr(cls, "block_promotion_tests", None)
+    if tests is None:
+        note = "no block_promotion_tests on career tuning"
+    else:
+        resolver = None
+        try:
+            from event_testing.resolver import SingleSimResolver
+            resolver = SingleSimResolver(SI)
+        except Exception as e:
+            note = "resolver import failed: " + repr(e)
+        if resolver is not None:
+            res = None
+            for meth in ("run_tests", "__call__"):
+                fn = getattr(tests, meth, None)
+                if callable(fn):
+                    try:
+                        res = fn(resolver)
+                        break
+                    except Exception as e:
+                        note = meth + " failed: " + repr(e)
+            if res is not None:
+                blocked = bool(res)
+RESULT = {"blocked": blocked, "note": note, "level": _user_level(SI)}
+'''
+        return self._run(body)
+
+    def affordance_gate_state(self):
+        """Read the per-class level band installed by level_gate.py on each
+        HC_Interaction_* tuning. Returns {name: {min,max,installed} | None}."""
+        body = '''
+mgr = _mgr(Types.INTERACTION)
+out = {}
+by_name = {}
+if mgr is not None:
+    try:
+        for c in mgr.types.values():
+            nm = getattr(c, "__name__", "")
+            if isinstance(nm, str) and nm.startswith("HC_Interaction_"):
+                by_name[nm] = c
+    except Exception:
+        pass
+for nm in NAMES:
+    c = by_name.get(nm)
+    if c is None:
+        out[nm] = None
+    else:
+        out[nm] = {
+            "min": getattr(c, "_hc_min_user_level", None),
+            "max": getattr(c, "_hc_max_user_level", None),
+            "installed": bool(getattr(c, "_hc_gate_installed", False)),
+        }
+RESULT = out
+'''
+        return self._run(body, {"NAMES": list(spec.AFFORDANCE_BANDS)})
+
+    def daily_task_stash(self):
+        body = '''
+c = _hist_career(SI)
+RESULT = {
+    "name": getattr(c, "_hc_daily_task_name", None) if c is not None else None,
+    "day": getattr(c, "_hc_daily_task_day", None) if c is not None else None,
+}
+'''
+        return self._run(body)
+
+    def wfh_enabled(self):
+        """Best-effort runtime check that the career tuning exposes the enabled
+        early-warning alarm carrying a work-from-home option. WFH authoring is
+        also asserted offline; this confirms it survived into the live tuning."""
+        body = '''
+cls = _career_cls()
+ewa = None
+wfh = None
+if cls is not None:
+    msgs = getattr(cls, "career_messages", None)
+    for src in (msgs, cls):
+        if src is None:
+            continue
+        cand = getattr(src, "career_early_warning_alarm", None)
+        if cand is not None:
+            ewa = cand
+            break
+    if ewa is not None:
+        wfh = getattr(ewa, "work_from_home_text", None)
+RESULT = {"early_warning_alarm": ewa is not None, "has_wfh_text": wfh is not None}
+'''
+        return self._run(body)
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+ALL_GATE_SKILL_IDS = tuple(sorted(spec.SKILL_IDS.values()))
+
+
+def _max_all_gate_skills(drv):
+    """Set every skill the gates ever look at to 10 so promotions are un-gated
+    while we climb to a setup level."""
+    drv.set_skills({g: 10 for g in ALL_GATE_SKILL_IDS})
+
+
+def _fresh_career_at_l1(drv):
+    """Remove the career + degree trait, then re-add so we start clean at L1."""
+    drv.set_trait(spec.FAST_TRACK_TRAIT_ID, present=False)
+    drv.remove_career()
+    time.sleep(0.2)
+    drv.add_career()
+    time.sleep(0.3)
+
+
+def _climb_to(drv, target, max_steps=12):
+    """Promote (gate-respecting) until the Sim reaches `target` level. Skills
+    must already be high enough that no gate fires. Returns the level reached."""
+    last = drv.historian_level_pay()[0]
+    for _ in range(max_steps):
+        if last is not None and last >= target:
+            break
+        r = drv.promote_once()
+        time.sleep(0.3)
+        last = r.get("after")
+        if r.get("error"):
+            break
+    return last
+
+
+# ---------------------------------------------------------------------------
+# steps
+# ---------------------------------------------------------------------------
+
+def step_offline_preflight(h, repo_root):
+    """Run the static authoring checks too, so a live run also proves the tuning
+    encodes the spec (and the live assertions below are checking the right LAW)."""
+    print("\n== Offline authoring preflight (no game needed) ==")
+    run_offline_checks(h, repo_root=repo_root)
+
+
 def step_preflight(h, drv):
-    """Verify the bridge answers and a zone is loaded before we touch anything."""
-    print("\n-- Preflight: bridge reachable + zone loaded --")
+    print("\n== Live preflight: bridge reachable + zone loaded ==")
     try:
         pong = drv.client.send("ping", {}, timeout=drv.timeout)
     except (BridgeTimeout, BridgeError) as e:
@@ -223,153 +516,200 @@ def step_preflight(h, drv):
         return False
     h.check(isinstance(pong, dict) and pong.get("pong") is True,
             "ping the bridge", "result={0!r}".format(pong))
-    zone_loaded = pong.get("zone_loaded") if isinstance(pong, dict) else None
-    h.check(bool(zone_loaded), "a zone is loaded",
+    zone = pong.get("zone_loaded") if isinstance(pong, dict) else None
+    h.check(bool(zone), "a zone is loaded",
             "zone_loaded={0} active_sim={1}".format(
-                zone_loaded, pong.get("active_sim") if isinstance(pong, dict) else None))
-    return bool(zone_loaded)
+                zone, pong.get("active_sim") if isinstance(pong, dict) else None))
+    return bool(zone)
 
 
-def step_enable_cheats_and_add(h, drv):
-    """testingcheats true; add the Historian career; assert L1 / 14/h."""
-    print("\n-- Add career: L1, 14 simoleons/hour --")
-    drv.cmd("testingcheats true")
-    drv.cmd("careers.add_career {0}".format(CAREER_NAME))
-    # Give the sim panel a beat to reflect the add (the bridge re-queries live,
-    # but the career system applies on the main-thread tick after our cmd).
-    time.sleep(0.5)
-    level, pay, _title = drv.historian_level_pay()
-    h.eq(_as_int(level), 1, "career level == 1 after add")
-    h.eq(_as_int(pay), PAY[1], "simoleons_per_hour == 14 at L1")
-    return level is not None
+def step_add_and_pay(h, drv):
+    print("\n== Add career via API: L1, then climb to L10 (pay schedule) ==")
+    _fresh_career_at_l1(drv)
+    level, pay = drv.historian_level_pay()
+    h.eq(level, 1, "career added at L1 (Python API, not cheat)")
+    h.eq(pay, spec.PAY[1], "L1 pay == {0}".format(spec.PAY[1]))
 
-
-def step_promote_to_top(h, drv):
-    """Promote x9, asserting the title and pay climb to L10 / 340."""
-    print("\n-- Promote L1 -> L10: titles + pay climb to 340 --")
-    # Clear skill/objective promotion gates the whole way up so a `promote`
-    # never silently no-ops (block_promotion_tests). Charisma is also gated at
-    # some ranks per the mod README.
-    drv.cmd("stats.set_skill_level {0} 10".format(SKILL_RESEARCH_DEBATE))
-    drv.cmd("stats.set_skill_level {0} 10".format(SKILL_WRITING))
-    drv.cmd("stats.set_skill_level Major_Charisma 10")
-
-    for target in range(2, 11):  # promote into L2..L10 (9 promotions)
-        drv.cmd("careers.promote {0}".format(CAREER_NAME))
-        time.sleep(0.35)
-        level, pay, _title = drv.historian_level_pay()
-        lvl_i = _as_int(level)
-        ok_level = h.eq(lvl_i, target, "promoted to L{0}".format(target))
-        h.eq(_as_int(pay), PAY[target],
-             "pay == {0} at L{1}".format(PAY[target], target))
-        if not ok_level:
-            # If the level didn't advance, a gate is firing; record it and stop
-            # climbing (the remaining ranks would all cascade-fail noisily).
-            h.check(False, "promotion chain stalled at target L{0}".format(target),
-                    "stuck at level {0!r}".format(level))
+    # Un-gate, then promote to the top asserting the exact pay at each rank.
+    _max_all_gate_skills(drv)
+    for target in range(2, spec.MAX_LEVEL + 1):
+        r = drv.promote_once()
+        time.sleep(0.3)
+        level = r.get("after")
+        ok = h.eq(_as_int(level), target, "promoted to L{0}".format(target))
+        _l, pay = drv.historian_level_pay()
+        h.eq(pay, spec.PAY[target], "L{0} pay == {1}".format(target, spec.PAY[target]))
+        if not ok:
+            h.check(False, "promotion chain stalled at L{0}".format(target),
+                    "stuck at {0!r} (err={1})".format(level, r.get("error")))
             return False
-    # Endpoint sanity: top rank pay is exactly 340.
-    _l, pay, _t = drv.historian_level_pay()
-    h.eq(_as_int(pay), 340, "top-rank pay == 340")
     return True
 
 
 def step_fast_track(h, drv):
-    """Remove career, grant the History-degree trait, re-add: starts at L5."""
-    print("\n-- Fast-track: degree trait -> re-add starts at L5 --")
-    drv.cmd("careers.remove_career {0}".format(CAREER_NAME))
+    print("\n== DU fast-track: History-degree trait -> join at L5 ==")
+    drv.remove_career()
+    time.sleep(0.2)
+    h.check(drv.historian_entry() is None, "career removed before fast-track test")
+
+    got = drv.set_trait(spec.FAST_TRACK_TRAIT_ID, present=True)
+    h.check(got.get("has") is True,
+            "History-degree trait {0} equipped".format(spec.FAST_TRACK_TRAIT_ID),
+            "has={0}".format(got.get("has")))
+    drv.add_career()
     time.sleep(0.3)
-    after_remove = drv.historian_entry()
-    h.check(after_remove is None, "career removed",
-            "still present: {0!r}".format(after_remove))
-
-    drv.cmd("traits.equip_trait {0}".format(HISTORY_DEGREE_TRAIT))
-    time.sleep(0.3)
-    drv.cmd("careers.add_career {0}".format(CAREER_NAME))
-    time.sleep(0.5)
-    level, _pay, _title = drv.historian_level_pay()
-    h.eq(_as_int(level), FAST_TRACK_START_LEVEL,
-         "degree holder fast-tracks to L{0}".format(FAST_TRACK_START_LEVEL))
-    return _as_int(level) == FAST_TRACK_START_LEVEL
+    level, _pay = drv.historian_level_pay()
+    h.eq(level, spec.FAST_TRACK_START_LEVEL,
+         "degree holder fast-tracks to L{0}".format(spec.FAST_TRACK_START_LEVEL))
+    # Clean up so later steps start from a known place.
+    drv.set_trait(spec.FAST_TRACK_TRAIT_ID, present=False)
 
 
-def step_skill_gate(h, drv):
-    """Skill-gate check around L8->L9.
+def step_skill_gates(h, drv):
+    print("\n== Skill gates: each transition BLOCKS below threshold, OPENS at it ==")
+    guid = spec.SKILL_IDS
+    for from_level in spec.gated_from_levels():
+        reqs = spec.SKILL_GATES[from_level]  # {skill_key: min_required}
+        to_level = from_level + 1
+        label = "L{0}->L{1} {2}".format(from_level, to_level, reqs)
+        print("\n  -- gate {0} --".format(label))
 
-    Promote up to L8, then with the two major skills at 9 the L9 promotion is
-    gated (should NOT advance); raising both to 10 clears the gate and L9 lands.
-    This exercises block_promotion_tests on the L8->L9 transition.
-    """
-    print("\n-- Skill gate around L8 -> L9 --")
-    # Make sure we're at L8: re-add fresh and walk up with skills maxed so we
-    # arrive precisely at L8, then knock the gate skills back down to 9.
-    drv.cmd("careers.remove_career {0}".format(CAREER_NAME))
-    time.sleep(0.3)
-    drv.cmd("traits.remove_trait {0}".format(HISTORY_DEGREE_TRAIT))
-    drv.cmd("stats.set_skill_level {0} 10".format(SKILL_RESEARCH_DEBATE))
-    drv.cmd("stats.set_skill_level {0} 10".format(SKILL_WRITING))
-    drv.cmd("stats.set_skill_level Major_Charisma 10")
-    drv.cmd("careers.add_career {0}".format(CAREER_NAME))
-    time.sleep(0.4)
-    # Walk to L8.
-    for _ in range(7):
-        drv.cmd("careers.promote {0}".format(CAREER_NAME))
+        # Arrive at the FROM level with all gate skills maxed (gates open).
+        _fresh_career_at_l1(drv)
+        _max_all_gate_skills(drv)
+        reached = _climb_to(drv, from_level)
+        if not h.eq(_as_int(reached), from_level,
+                    "reached L{0} for gate test".format(from_level)):
+            continue
+
+        # 1) Knock the gated skills BELOW their minimum -> gate must BLOCK.
+        below = {guid[k]: spec.skill_max_value_for_block(v) for k, v in reqs.items()}
+        drv.set_skills(below)
+        time.sleep(0.2)
+        blk = drv.promotion_blocked()
+        if blk.get("blocked") is None:
+            h.check(False, "{0}: gate evaluable below threshold".format(label),
+                    "could not evaluate: {0}".format(blk.get("note")))
+        else:
+            h.check(blk.get("blocked") is True,
+                    "{0}: BLOCKED while skills below threshold".format(label),
+                    "blocked={0} note={1}".format(blk.get("blocked"), blk.get("note")))
+        # Secondary signal: a natural promote should NOT advance the level.
+        r = drv.promote_once()
         time.sleep(0.3)
-    level, _pay, _t = drv.historian_level_pay()
-    if not h.eq(_as_int(level), 8, "reached L8 for gate test"):
-        return False
+        h.eq(_as_int(r.get("after")), from_level,
+             "{0}: promote_career() does not advance while blocked".format(label))
 
-    # Drop the gate skills to 9 -> the L9 promotion should be BLOCKED.
-    drv.cmd("stats.set_skill_level {0} 9".format(SKILL_RESEARCH_DEBATE))
-    drv.cmd("stats.set_skill_level {0} 9".format(SKILL_WRITING))
-    time.sleep(0.2)
-    drv.cmd("careers.promote {0}".format(CAREER_NAME))
-    time.sleep(0.35)
-    level_gated, _p, _t = drv.historian_level_pay()
-    h.eq(_as_int(level_gated), 8, "L9 promotion BLOCKED while skills < 10")
+        # 2) Raise the gated skills TO their minimum -> gate must OPEN.
+        at = {guid[k]: v for k, v in reqs.items()}
+        drv.set_skills(at)
+        time.sleep(0.2)
+        blk2 = drv.promotion_blocked()
+        if blk2.get("blocked") is None:
+            h.check(False, "{0}: gate evaluable at threshold".format(label),
+                    "could not evaluate: {0}".format(blk2.get("note")))
+        else:
+            h.check(blk2.get("blocked") is False,
+                    "{0}: OPEN once skills reach threshold".format(label),
+                    "blocked={0}".format(blk2.get("blocked")))
+        # And a natural promote should now land the next level.
+        r2 = drv.promote_once()
+        time.sleep(0.3)
+        h.eq(_as_int(r2.get("after")), to_level,
+             "{0}: promote_career() advances once gate opens".format(label))
 
-    # Raise to 10 -> the L9 promotion should now SUCCEED.
-    drv.cmd("stats.set_skill_level {0} 10".format(SKILL_RESEARCH_DEBATE))
-    drv.cmd("stats.set_skill_level {0} 10".format(SKILL_WRITING))
-    time.sleep(0.2)
-    drv.cmd("careers.promote {0}".format(CAREER_NAME))
-    time.sleep(0.35)
-    level_open, _p2, _t2 = drv.historian_level_pay()
-    h.eq(_as_int(level_open), 9, "L9 promotion SUCCEEDS once skills == 10")
-    return _as_int(level_open) == 9
+
+def step_affordance_bands(h, drv):
+    print("\n== Affordance/overlay level bands installed by level_gate.py ==")
+    state = drv.affordance_gate_state()
+    if not isinstance(state, dict):
+        h.check(False, "read affordance gate state", "got {0!r}".format(state))
+        return
+    installed = 0
+    for name, (lo, hi) in spec.AFFORDANCE_BANDS.items():
+        got = state.get(name)
+        if not isinstance(got, dict):
+            h.check(False, "{0}: gate present".format(name),
+                    "not registered/gated: {0!r}".format(got))
+            continue
+        band_ok = (_as_int(got.get("min")) == lo and _as_int(got.get("max")) == hi)
+        h.check(band_ok and got.get("installed"),
+                "{0}: band [{1},{2}] installed".format(name, lo, hi),
+                "got min={0} max={1} installed={2}".format(
+                    got.get("min"), got.get("max"), got.get("installed")))
+        if band_ok and got.get("installed"):
+            installed += 1
+    h.eq(installed, len(spec.AFFORDANCE_BANDS),
+         "all {0} affordance/overlay gates installed".format(len(spec.AFFORDANCE_BANDS)))
+
+    # Spot-check the derived "offered at level N" set against the spec at a few
+    # ranks, using the live bands we just read (gate logic = min<=level<=max).
+    def offered_from_live(level):
+        out = set()
+        for name, got in state.items():
+            if isinstance(got, dict):
+                lo, hi = _as_int(got.get("min")), _as_int(got.get("max"))
+                if lo is not None and hi is not None and lo <= level <= hi:
+                    out.add(name)
+        return out
+    for level in (1, 4, 8, 10):
+        h.eq(offered_from_live(level), set(spec.affordances_offered_at(level)),
+             "affordances offered at L{0} match spec".format(level))
 
 
 def step_aspiration(h, drv):
-    """Add the Historian aspiration track via cheat."""
-    print("\n-- Aspiration track --")
-    try:
-        drv.cmd("aspirations.add_aspiration {0}".format(ASPIRATION_TRACK))
-        h.check(True, "added aspiration {0}".format(ASPIRATION_TRACK))
-    except BridgeError as e:
-        h.check(False, "added aspiration {0}".format(ASPIRATION_TRACK), str(e))
-    return True
+    print("\n== Aspiration track grants the Habilitation Renown reward trait ==")
+    # Make sure the trait isn't already on the Sim from a prior run.
+    drv.set_trait(spec.REWARD_TRAIT_NAME, present=False)
+    time.sleep(0.2)
+    res = drv.set_aspiration_track(spec.ASPIRATION_TRACK_NAME)
+    h.check(res.get("applied") is True,
+            "set aspiration track {0}".format(spec.ASPIRATION_TRACK_NAME),
+            "applied={0} error={1}".format(res.get("applied"), res.get("error")))
+    # The provided trait should be granted while the track is the primary asp.
+    has = res.get("has_reward_trait")
+    if has is None:
+        has = drv.has_trait(spec.REWARD_TRAIT_NAME)
+    h.check(bool(has),
+            "track grants reward trait {0}".format(spec.REWARD_TRAIT_NAME),
+            "has_reward_trait={0}".format(has))
 
 
-def step_no_new_crashes(h, userdata, baseline_count):
-    """`crashes --since-mark`: assert 0 new UI exceptions since the mark."""
-    print("\n-- Crash check: 0 new UI exceptions since mark --")
+def step_wfh_and_rotation(h, drv):
+    print("\n== Work-From-Home enabled + daily-task rotation ran ==")
+    wfh = drv.wfh_enabled()
+    # Best-effort: the alarm object should exist; WFH text presence is the
+    # canonical "WFH offered" signal (also asserted offline).
+    h.check(wfh.get("early_warning_alarm") is True,
+            "career exposes early-warning alarm at runtime",
+            "early_warning_alarm={0}".format(wfh.get("early_warning_alarm")))
+    h.check(wfh.get("has_wfh_text") is True,
+            "Work-From-Home option present at runtime",
+            "has_wfh_text={0} (also verified offline)".format(wfh.get("has_wfh_text")))
+
+    stash = drv.daily_task_stash()
+    h.check(stash.get("name") is not None,
+            "daily-task rotation chose a task for the Historian Sim",
+            "stash={0}".format(stash))
+
+
+def step_no_new_crashes(h, userdata):
+    print("\n== Crash check: 0 new UI exceptions since mark ==")
     try:
         watch = CrashWatch(userdata)
     except ValueError as e:
         h.check(False, "crash watch available", str(e))
-        return False
+        return
     new = watch.since_mark()
     h.check(len(new) == 0, "no new/changed crash logs since mark",
             "new={0}".format(new) if new else "clean")
-    return len(new) == 0
 
 
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
-def run(userdata=None, timeout=15.0, poll_interval=0.1):
-    """Run the whole scenario. Returns 0 on full PASS, non-zero otherwise."""
+def run(userdata=None, timeout=20.0, poll_interval=0.1, do_offline=True):
     bridge_dir = gamepaths.find_bridge_dir(userdata)
     resolved_userdata = gamepaths.find_userdata(userdata)
     if bridge_dir is None or resolved_userdata is None:
@@ -379,7 +719,7 @@ def run(userdata=None, timeout=15.0, poll_interval=0.1):
         )
         return 2
 
-    print("sims4ctl scenario: HistorianCareer end-to-end")
+    print("sims4ctl scenario: HistorianCareer ten-rank in-game verification")
     print("  userdata   : {0}".format(resolved_userdata))
     print("  bridge dir : {0}".format(bridge_dir))
 
@@ -387,35 +727,37 @@ def run(userdata=None, timeout=15.0, poll_interval=0.1):
     drv = Driver(client, timeout)
     h = Harness()
 
-    # Mark the crash baseline up-front so `--since-mark` at the end only sees
-    # exceptions THIS run produced.
+    # Authoring preflight (no game needed). Repo root is three up from here.
+    repo_root = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
+    if do_offline:
+        step_offline_preflight(h, repo_root)
+
+    # Mark the crash baseline before touching the game.
     try:
         baseline = CrashWatch(resolved_userdata).mark()
-        print("  crash mark : {0} existing log(s) baselined".format(len(baseline)))
+        print("\n  crash mark : {0} existing log(s) baselined".format(len(baseline)))
     except ValueError as e:
         sys.stderr.write("FATAL: could not set crash mark: {0}\n".format(e))
         return 2
 
     try:
         if not step_preflight(h, drv):
-            # No zone / no bridge: the rest can't run. Summarize and bail.
-            h.summary()
-            return 1
-
-        step_enable_cheats_and_add(h, drv)
-        step_promote_to_top(h, drv)
+            print("\n(No zone / bridge -- live checks skipped; "
+                  "offline authoring results above still stand.)")
+            ok = h.summary()
+            return 0 if ok else 1
+        step_add_and_pay(h, drv)
         step_fast_track(h, drv)
-        step_skill_gate(h, drv)
+        step_skill_gates(h, drv)
+        step_affordance_bands(h, drv)
         step_aspiration(h, drv)
+        step_wfh_and_rotation(h, drv)
     except BridgeTimeout as e:
         h.check(False, "bridge stayed responsive", "timeout: {0}".format(e))
     except BridgeError as e:
         h.check(False, "bridge command succeeded", "bridge error: {0}".format(e))
 
-    # Crash check runs regardless -- it's bridge-free and is the whole point of
-    # gating on "did this run break the UI".
-    step_no_new_crashes(h, resolved_userdata, len(baseline))
-
+    step_no_new_crashes(h, resolved_userdata)
     ok = h.summary()
     return 0 if ok else 1
 
@@ -423,27 +765,23 @@ def run(userdata=None, timeout=15.0, poll_interval=0.1):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="historian_career.py",
-        description="sims4ctl example scenario: drive the HistorianCareer mod "
-        "end-to-end against a running Sims 4.",
+        description="sims4ctl scenario: verify the ten-rank HistorianCareer mod "
+        "end-to-end against a running Sims 4 (Python API, not cheats).",
     )
-    parser.add_argument(
-        "--userdata", default=None,
-        help="override the Sims 4 user-data folder (else $SIMS4CTL_USERDATA or "
-        "auto-detect).",
-    )
-    parser.add_argument(
-        "--timeout", type=float, default=15.0,
-        help="bridge response timeout in seconds (default 15).",
-    )
-    parser.add_argument(
-        "--poll-interval", type=float, default=0.1,
-        help="how often to poll response.json, in seconds (default 0.1).",
-    )
+    parser.add_argument("--userdata", default=None,
+                        help="override the Sims 4 user-data folder.")
+    parser.add_argument("--timeout", type=float, default=20.0,
+                        help="bridge response timeout in seconds (default 20).")
+    parser.add_argument("--poll-interval", type=float, default=0.1,
+                        help="how often to poll response.json (default 0.1s).")
+    parser.add_argument("--no-offline", action="store_true",
+                        help="skip the static authoring preflight.")
     args = parser.parse_args(argv)
     return run(
         userdata=args.userdata,
         timeout=args.timeout,
         poll_interval=args.poll_interval,
+        do_offline=not args.no_offline,
     )
 
 
