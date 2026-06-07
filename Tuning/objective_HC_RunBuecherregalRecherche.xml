@@ -11,8 +11,12 @@
   </V>
   <V n="objective_test" t="ran_interaction_test">
     <U n="ran_interaction_test">
+      <!-- Match either the bookshelf picker or its read continuation: depending
+           on whether the picker itself raises the interaction event, the read SI
+           (HC_Interaction_BuecherregalRechercheRead) is the reliable signal. -->
       <L n="affordances">
         <T>HC_Interaction_BuecherregalRecherche</T>
+        <T>HC_Interaction_BuecherregalRechercheRead</T>
       </L>
     </U>
   </V>

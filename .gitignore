@@ -15,3 +15,7 @@ Scripts/**/*.pyc
 Build/_research_tmp/
 swf-extracts/
 Build/.pyc-build/
+
+# recon-affordances.mjs scratch outputs (regenerated on demand)
+Build/s4tk-builder/recon-index.tsv
+Build/s4tk-builder/recon-dump/
