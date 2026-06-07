@@ -9,7 +9,44 @@
     <T>Interaction_Super</T>
     <T>Interaction_All</T>
   </L>
-  <V n="basic_content" t="one_shot"/>
+  <!--
+    Timed activity (bug fix: was t="one_shot", which completed instantly). The
+    Sim now stands at the bookshelf and researches for ~45-90 sim minutes before
+    the outcome loot fires, matching the feel of EA's own timed tasks. Modelled
+    on EA's sim_doStretching (s=96787): flexible_length + looping_content with a
+    time_based EXIT_NATURALLY. The looping animation is the generic actor-only
+    Stand_Idle (factory 12082, no held-book prop) because EA's bookshelf read
+    mixers (Book_Read_Active 13120 -> Read_Active 11745) bind a "book" ASM actor
+    these interactions never create, so they would fail to play here. All
+    numeric refs are base-game. (Verify in-game: Sim should idle at the shelf
+    for the duration, then gain the level loot.)
+  -->
+  <V n="basic_content" t="flexible_length">
+    <U n="flexible_length">
+      <L n="conditional_actions">
+        <V t="literal">
+          <U n="literal">
+            <L n="conditions">
+              <V t="time_based">
+                <U n="time_based">
+                  <T n="max_time">90</T>
+                  <T n="min_time">45</T>
+                </U>
+              </V>
+            </L>
+            <E n="interaction_action">EXIT_NATURALLY</E>
+          </U>
+        </V>
+      </L>
+      <V n="content" t="looping_content">
+        <U n="looping_content">
+          <U n="animation_ref">
+            <T n="factory">12082</T><!-- Stand_Idle (actor-only, no book prop) -->
+          </U>
+        </U>
+      </V>
+    </U>
+  </V>
   <V n="outcome" t="single">
     <U n="single">
       <U n="actions">

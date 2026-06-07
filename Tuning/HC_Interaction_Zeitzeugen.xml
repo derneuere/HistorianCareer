@@ -28,7 +28,81 @@
       </U>
     </V>
   </L>
-  <V n="basic_content" t="one_shot"/>
+  <!--
+    Timed social (bug fix: was t="one_shot", which completed instantly). The
+    actor and the Elder target now stand and converse for ~45-90 sim minutes
+    before the outcome loot fires. Modelled on EA's sim_Chat (s=13998):
+    flexible_length staging_content driving the generic friendly non-touching
+    social mixer list, the standard social canonical/idle/listen/greet
+    animations, and the base "chat" social group. The time_based EXIT_NATURALLY
+    ends it deterministically; the ExitConditionList references end it
+    gracefully if the target leaves (77072) or motives near-fail (40705). All
+    numeric refs are base-game.
+  -->
+  <T n="_social_group_type">16390</T><!-- socials.group "chat" -->
+  <L n="_static_commodities">
+    <U>
+      <T n="static_commodity">16435</T><!-- StaticCommodity_Socialize -->
+    </U>
+  </L>
+  <V n="basic_content" t="flexible_length">
+    <U n="flexible_length">
+      <L n="conditional_actions">
+        <V t="list_reference">
+          <T n="list_reference">40705</T><!-- ExitConditionList_MotivesNearFail -->
+        </V>
+        <V t="list_reference">
+          <T n="list_reference">77072</T><!-- ExitConditionList_Socialization -->
+        </V>
+        <V t="literal">
+          <U n="literal">
+            <L n="conditions">
+              <V t="time_based">
+                <U n="time_based">
+                  <T n="max_time">90</T>
+                  <T n="min_time">45</T>
+                </U>
+              </V>
+            </L>
+            <E n="interaction_action">EXIT_NATURALLY</E>
+          </U>
+        </V>
+      </L>
+      <V n="content" t="staging_content">
+        <U n="staging_content">
+          <U n="content_set">
+            <L n="affordance_lists">
+              <T>24508</T><!-- social_Mixers_Friendly_NonTouching -->
+            </L>
+          </U>
+        </U>
+      </V>
+    </U>
+  </V>
+  <V n="canonical_animation" t="enabled">
+    <U n="enabled">
+      <T n="factory">11326</T><!-- Canonical_NonTouchingSocial -->
+    </U>
+  </V>
+  <V n="idle_animation" t="enabled">
+    <U n="enabled">
+      <T n="factory">11570</T><!-- Listen_Listen_Looping_basic -->
+    </U>
+  </V>
+  <U n="listen_animation">
+    <T n="factory">11570</T><!-- Listen_Listen_Looping_basic -->
+  </U>
+  <U n="social_start_animation">
+    <U n="focus">
+      <T n="layer">10</T>
+      <L n="subject">
+        <E>SocialGroupSims</E>
+      </L>
+    </U>
+    <U n="greet_animation">
+      <T n="factory">75404</T><!-- Soc_Generic_EnterGroup -->
+    </U>
+  </U>
   <V n="outcome" t="single">
     <U n="single">
       <U n="actions">
