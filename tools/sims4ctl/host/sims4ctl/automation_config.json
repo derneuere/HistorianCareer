@@ -1,0 +1,53 @@
+{
+  "_README": "Click targets for the Recipe B input-automation loop. EVERY coordinate here is a PLACEHOLDER and MUST be calibrated live with `sims4ctl calibrate` before driving the real game. See docs/RECIPE_B.md section 'Calibration'.",
+
+  "_schema": {
+    "window_title_substr": "Case-insensitive substring matched against the game window title. The live German title is 'Die Sims™ 4'; 'Sims' matches all locales.",
+    "target": "Each clickable target is EITHER {\"norm\": [x, y]} with x,y in [0,1] as a fraction of the CLIENT rect, OR {\"template\": \"path/to/crop.png\", \"threshold\": 0.85} matched with OpenCV. If both keys are present, the template is tried first and 'norm' is the fallback. 'enabled': false skips an optional step (e.g. the MODS dialog when it doesn't appear).",
+    "templates_dir": "Directory (relative to this file) where button-template PNGs captured by `calibrate` live."
+  },
+
+  "window_title_substr": "Sims",
+  "templates_dir": "templates",
+
+  "focus_retries": 3,
+  "click_settle_seconds": 0.4,
+
+  "targets": {
+    "mods_dialog_dismiss": {
+      "_comment": "Startup MODS-notice close [X]. CALIBRATED on 4K@150%, client 2023x1138 (norm of the X, dialog centered on the window). ENABLED because this install has 'Bei Start zeigen' checked, so the dialog appears every launch. NOTE: norm-only always clicks; if you uncheck show-at-startup (no dialog), add a 'template' crop of the X so locate returns None when absent, or set enabled:false.",
+      "enabled": true,
+      "norm": [0.6372, 0.1511]
+    },
+    "continue": {
+      "_comment": "Main-menu 'Spiel fortsetzen' (Continue = load most-recent save). CALIBRATED on 4K@150%, client 2023x1138 (screen approx 210,793); verified end-to-end -> save loaded, bridge heartbeat in ~6s. Single-click default for `load-save --continue`.",
+      "norm": [0.0949, 0.4297]
+    },
+    "load_game": {
+      "_comment": "Main-menu 'Spiel laden' (Load Game) -> opens the save picker. PLACEHOLDER. Used by `load-save --slot N`.",
+      "norm": [0.5, 0.55],
+      "template": "load_game.png",
+      "threshold": 0.85
+    },
+    "load_confirm": {
+      "_comment": "The 'Spielen'/confirm button inside the save picker once a slot thumbnail is selected. PLACEHOLDER.",
+      "norm": [0.85, 0.9],
+      "template": "load_confirm.png",
+      "threshold": 0.85
+    },
+    "new_game": {
+      "_comment": "Main-menu 'Neues Spiel' (New Game). PLACEHOLDER. Used by the optional `new-game` command.",
+      "norm": [0.5, 0.65],
+      "template": "new_game.png",
+      "threshold": 0.85
+    },
+    "save_slots": {
+      "_comment": "Per-slot thumbnail targets inside the Load-Game picker, keyed by slot id (decimal string). PLACEHOLDER single example for the reserved test slot 255 (0xFF). Add entries as you calibrate each slot's thumbnail position. `load-save --slot N` clicks slots[str(N)] then 'load_confirm'.",
+      "255": {
+        "norm": [0.25, 0.3],
+        "template": "slot_255.png",
+        "threshold": 0.85
+      }
+    }
+  }
+}

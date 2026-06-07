@@ -12,6 +12,22 @@ Subcommands (see _BUILD_SPEC.md "Host CLI commands"):
   launch                       start TS4_x64.exe
   doctor                       print resolved paths + heartbeat freshness
 
+Recipe B autonomous-loop commands (see docs/RECIPE_B.md). These drive the
+menu->loaded-save gap that has NO in-game Python API by launching the game and
+synthesizing mouse clicks against CONFIGURABLE targets:
+
+  start                        launch TS4 and wait for the main MENU
+  stop [--save]                save (best-effort) then terminate TS4_x64.exe
+  load-save [--continue|--slot N]  focus window, dismiss MODS dialog, click
+                               Continue/Load, wait for ZONE_LOADED
+  new-game                     click 'Neues Spiel' (optional/stub)
+  run-scenario <name> [--auto] run scenarios/<name>.py (with --auto: ensure a
+                               zone is loaded first)
+  wait-for <state> [--timeout] block until DOWN/MENU/LOADING/ZONE_LOADED
+  state [--menu-aware]         (extended) report the gamestate, not just in-zone
+  calibrate                    capture the window + print rect/size for deriving
+                               click coordinates (NO clicking)
+
 Global ``--json`` prints the raw JSON result of a command instead of the
 human-readable rendering. Global ``--userdata PATH`` overrides the Sims 4
 user-data folder (also honoured via the SIMS4CTL_USERDATA env var) so the CLI
@@ -141,6 +157,23 @@ def cmd_eval(args):
 
 
 def cmd_state(args):
+    # Menu-aware mode: report the file+process+window state machine (DOWN/MENU/
+    # LOADING/ZONE_LOADED) instead of asking the bridge for in-zone state. This
+    # works with NO bridge response (the game may be at the menu) and never
+    # blocks on a bridge timeout.
+    if getattr(args, "menu_aware", False):
+        from .gamestate import GameState
+
+        gs = GameState(userdata=args.userdata)
+        snap = gs.snapshot()
+        human = "state={0}  process_running={1} zone_loaded={2} " \
+                "heartbeat_fresh={3} active_sim={4}".format(
+                    snap["state"], snap["process_running"], snap["zone_loaded"],
+                    snap["heartbeat_fresh"], snap["active_sim"],
+                )
+        _emit(args, snap, human)
+        return 0
+
     client = _make_client(args)
     send_args = {"topic": args.topic}
     if args.career:
@@ -325,8 +358,482 @@ def cmd_doctor(args):
 
 
 # ---------------------------------------------------------------------------
+# Recipe B: autonomous-loop commands (launch -> dismiss dialog -> click ->
+# wait -> run -> quit). See docs/RECIPE_B.md. The MECHANISM lives in
+# winauto/gamestate/saves/automation_config; these handlers wire it into the CLI.
+# ---------------------------------------------------------------------------
+
+def _game_state(args):
+    """Construct a GameState from the CLI args (shared by start/stop/wait-for)."""
+    from .gamestate import GameState
+
+    return GameState(userdata=args.userdata)
+
+
+def cmd_start(args):
+    """Launch TS4 (steam://rungameid/<appid> preferred, raw exe fallback) then
+    block until the main MENU is reachable.
+
+    Reads the appid from the game's ``steam_appid.txt`` (falling back to the
+    known default) so the Steam/EA entitlement bridge negotiates correctly. The
+    raw-exe path only works when EA Desktop is already up; the steam URL lets
+    Steam start the whole stack. ``--exe`` forces the raw path.
+    """
+    from .gamestate import MENU, StateTimeout
+
+    exe = gamepaths.find_ts4_exe()  # raw-exe fallback / --exe target
+    launched = None
+
+    if not args.exe:
+        appid = gamepaths.find_steam_appid()
+        url = "steam://rungameid/{0}".format(appid)
+        try:
+            # os.startfile is the reliable Windows way to hand a URL to Steam.
+            if hasattr(os, "startfile"):
+                os.startfile(url)  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["cmd", "/c", "start", "", url])
+            launched = url
+        except OSError as e:
+            # Fall back to the raw exe if the steam handler isn't available.
+            if exe is None:
+                raise CliError(
+                    "could not launch via {0} ({1}) and TS4_x64.exe was not found "
+                    "at {2}".format(url, e, gamepaths.DEFAULT_TS4_EXE)
+                )
+            subprocess.Popen([str(exe)], cwd=str(exe.parent))
+            launched = str(exe)
+    else:
+        if exe is None:
+            raise CliError(
+                "TS4_x64.exe not found at {0}; cannot honour --exe".format(
+                    gamepaths.DEFAULT_TS4_EXE
+                )
+            )
+        subprocess.Popen([str(exe)], cwd=str(exe.parent))
+        launched = str(exe)
+
+    gs = _game_state(args)
+    try:
+        snap = gs.wait_for(MENU, timeout=args.timeout, poll=args.poll)
+    except StateTimeout as e:
+        raise CliError(
+            "launched {0} but the main menu never came up: {1}".format(launched, e)
+        )
+    _emit(
+        args,
+        {"launched": launched, "state": snap["state"], "snapshot": snap},
+        "launched {0}; reached state {1}".format(launched, snap["state"]),
+    )
+    return 0
+
+
+def cmd_stop(args):
+    """Best-effort save (with --save) then terminate TS4_x64.exe.
+
+    With ``--save`` and a loaded zone, ask the bridge to save via the ``cmd``
+    verb (``save`` console command) before killing -- TS4 does NOT autosave on
+    exit, and killing mid-save corrupts the active slot, so we save first and
+    only then taskkill. The kill tries a graceful ``taskkill /IM`` and escalates
+    to ``/F`` if the process is still up.
+    """
+    from .gamestate import ZONE_LOADED, is_process_running
+
+    saved = False
+    if args.save:
+        gs = _game_state(args)
+        if gs.current_state() == ZONE_LOADED:
+            try:
+                client = _make_client(args)
+                # The bridge `cmd` verb runs a cheat/console command on the main
+                # thread; `save` triggers persistence.save_game for the active
+                # slot. Best-effort: a failure here must not block the kill.
+                client.send("cmd", {"command": "save"}, timeout=args.timeout)
+                saved = True
+            except (BridgeError, BridgeTimeout, CliError) as e:
+                sys.stderr.write("warning: in-game save failed: {0}\n".format(e))
+        else:
+            sys.stderr.write(
+                "warning: --save requested but no zone is loaded; skipping save\n"
+            )
+
+    killed = _terminate_ts4()
+    payload = {"saved": saved, "killed": killed,
+               "still_running": is_process_running()}
+    human = "{0}terminated TS4_x64.exe (killed={1})".format(
+        "saved + " if saved else "", killed
+    )
+    _emit(args, payload, human)
+    # Non-zero if the process somehow survived both kill attempts.
+    return 0 if not payload["still_running"] else 1
+
+
+def _terminate_ts4():
+    """taskkill TS4_x64.exe, escalating to /F. Returns True if a kill ran.
+
+    On non-Windows (no taskkill) this is a no-op returning False.
+    """
+    if os.name != "nt":
+        return False
+    image = "TS4_x64.exe"
+    # Graceful first.
+    subprocess.run(["taskkill", "/IM", image],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Force if still present.
+    from .gamestate import is_process_running
+
+    if is_process_running(image):
+        subprocess.run(["taskkill", "/F", "/IM", image],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return True
+
+
+def _find_window_or_raise(config):
+    """Find the game window using the config's title substring, or CliError."""
+    from . import winauto
+
+    title = config.get("window_title_substr", "Sims")
+    try:
+        window = winauto.find_game_window(title)
+    except winauto.AutomationDepsMissing as e:
+        raise CliError(str(e))
+    if window is None:
+        raise CliError(
+            "no game window matching {0!r} found; is the game at the main menu "
+            "and is its window visible?".format(title)
+        )
+    return window
+
+
+def _focus_and_click_target(config, window, target, label, settle):
+    """Focus the window, resolve a target to (x,y), and click it.
+
+    Returns the clicked (x, y), or raises CliError if the target can't be
+    resolved (no template match and no normalized fallback).
+    """
+    import time as _time
+
+    from . import automation_config as acfg
+    from . import winauto
+
+    # Re-assert foreground right before the click (focus can be stolen between
+    # steps); retry per the configured count.
+    for _ in range(max(1, int(config.get("focus_retries", 3)))):
+        if winauto.focus_window(window["hwnd"]):
+            break
+        _time.sleep(0.2)
+
+    xy = acfg.resolve_target_xy(config, target, window, winauto)
+    if xy is None:
+        raise CliError(
+            "could not resolve click target {0!r}: no template match and no "
+            "normalized fallback. Calibrate it (sims4ctl calibrate) and update "
+            "the automation config.".format(label)
+        )
+    winauto.click(xy[0], xy[1])
+    _time.sleep(settle)
+    return xy
+
+
+def cmd_load_save(args):
+    """Recipe B: focus the window, optionally dismiss the MODS dialog, click
+    Continue (or Load->slot->confirm), then wait for ZONE_LOADED.
+
+    Default is ``--continue`` (single click of 'Spiel fortsetzen', the most-
+    recent save). ``--slot N`` instead clicks 'Spiel laden', the slot's
+    thumbnail, then the confirm button. All click targets come from
+    automation_config.json and are CONFIGURABLE / calibratable.
+    """
+    from . import automation_config as acfg
+    from .gamestate import ZONE_LOADED, StateTimeout
+
+    try:
+        config = acfg.load_config(args.config)
+    except acfg.ConfigError as e:
+        raise CliError(str(e))
+
+    window = _find_window_or_raise(config)
+    settle = float(config.get("click_settle_seconds", 0.4))
+    actions = []
+
+    # 1. Dismiss the startup MODS dialog if configured + enabled. Best-effort:
+    #    if it isn't on screen the template misses and (for a template-only
+    #    target) we skip; a normalized-only dismiss always clicks, which is
+    #    harmless on the menu.
+    if not args.no_dismiss:
+        try:
+            dismiss = acfg.get_target(config, "mods_dialog_dismiss")
+        except acfg.ConfigError:
+            dismiss = None
+        if dismiss and dismiss.get("enabled", True):
+            try:
+                xy = _focus_and_click_target(
+                    config, window, dismiss, "mods_dialog_dismiss", settle
+                )
+                actions.append({"dismiss_mods_dialog": list(xy)})
+            except CliError as e:
+                # A missing dialog must not fail the load; just note it.
+                sys.stderr.write("note: MODS-dialog dismiss skipped: {0}\n".format(e))
+
+    # 2. Click Continue, or walk the Load-Game picker for an explicit slot.
+    if args.slot is None:
+        cont = acfg.get_target(config, "continue")
+        xy = _focus_and_click_target(config, window, cont, "continue", settle)
+        actions.append({"continue": list(xy)})
+    else:
+        load = acfg.get_target(config, "load_game")
+        xy = _focus_and_click_target(config, window, load, "load_game", settle)
+        actions.append({"load_game": list(xy)})
+        slot_t = acfg.get_slot_target(config, args.slot)
+        xy = _focus_and_click_target(
+            config, window, slot_t, "save_slots[{0}]".format(args.slot), settle
+        )
+        actions.append({"slot_{0}".format(args.slot): list(xy)})
+        confirm = acfg.get_target(config, "load_confirm")
+        xy = _focus_and_click_target(config, window, confirm, "load_confirm", settle)
+        actions.append({"load_confirm": list(xy)})
+
+    # 3. Wait for the bridge to report a fresh loaded zone.
+    gs = _game_state(args)
+    try:
+        snap = gs.wait_for(ZONE_LOADED, timeout=args.timeout, poll=args.poll)
+    except StateTimeout as e:
+        raise CliError(
+            "clicked to load but ZONE_LOADED never arrived: {0}. The click "
+            "targets may need calibration (sims4ctl calibrate).".format(e)
+        )
+    _emit(
+        args,
+        {"actions": actions, "state": snap["state"], "snapshot": snap},
+        "loaded save; state {0} active_sim={1}".format(
+            snap["state"], snap.get("active_sim")
+        ),
+    )
+    return 0
+
+
+def cmd_new_game(args):
+    """Optional: click 'Neues Spiel' (New Game) on the main menu.
+
+    Stub-ish: clicks the configured New-Game target and returns. It does NOT
+    drive CAS to a loaded zone (that path is multi-screen and out of scope for
+    the scaffold); a follow-up would wait for ZONE_LOADED after finishing CAS.
+    """
+    from . import automation_config as acfg
+
+    try:
+        config = acfg.load_config(args.config)
+    except acfg.ConfigError as e:
+        raise CliError(str(e))
+    window = _find_window_or_raise(config)
+    settle = float(config.get("click_settle_seconds", 0.4))
+    target = acfg.get_target(config, "new_game")
+    xy = _focus_and_click_target(config, window, target, "new_game", settle)
+    _emit(
+        args,
+        {"clicked": {"new_game": list(xy)}},
+        "clicked New Game at {0} (CAS is not automated by this scaffold)".format(xy),
+    )
+    return 0
+
+
+def cmd_run_scenario(args):
+    """Run ``scenarios/<name>.py`` against the running game.
+
+    With ``--auto`` the loop is self-bootstrapping: if no zone is loaded it runs
+    ``start`` then ``load-save --continue`` first, so the scenario always finds a
+    loaded zone. Without ``--auto`` it just runs the scenario and lets it report
+    its own preflight failure if no zone is loaded. Exit code is the scenario's.
+    """
+    from .gamestate import DOWN, MENU, ZONE_LOADED
+
+    scenario_path = _SCENARIOS_DIR / "{0}.py".format(args.name)
+    if not scenario_path.is_file():
+        raise CliError(
+            "scenario {0!r} not found at {1}".format(args.name, scenario_path)
+        )
+
+    if args.auto:
+        gs = _game_state(args)
+        state = gs.current_state()
+        if state == DOWN:
+            rc = cmd_start(args)
+            if rc != 0:
+                return rc
+            state = MENU
+        if state != ZONE_LOADED:
+            # Reuse the load-save handler with continue semantics.
+            args.slot = getattr(args, "slot", None)
+            args.no_dismiss = getattr(args, "no_dismiss", False)
+            args.config = getattr(args, "config", None)
+            rc = cmd_load_save(args)
+            if rc != 0:
+                return rc
+
+    # Run the scenario as a child process so its argparse/exit code are honoured
+    # and a scenario crash can't take down the CLI.
+    cmd = [sys.executable, str(scenario_path)]
+    if args.userdata:
+        cmd += ["--userdata", args.userdata]
+    proc = subprocess.run(cmd)
+    _emit(
+        args,
+        {"scenario": args.name, "exit_code": proc.returncode},
+        "scenario {0} exited {1}".format(args.name, proc.returncode),
+    )
+    return proc.returncode
+
+
+def cmd_wait_for(args):
+    """Block until the game reaches ``state`` (DOWN/MENU/LOADING/ZONE_LOADED)."""
+    from .gamestate import ALL_STATES, StateTimeout
+
+    want = args.state.upper()
+    if want not in ALL_STATES:
+        raise CliError(
+            "unknown state {0!r}; expected one of {1}".format(
+                args.state, ", ".join(ALL_STATES)
+            )
+        )
+    gs = _game_state(args)
+    try:
+        snap = gs.wait_for(want, timeout=args.timeout, poll=args.poll)
+    except StateTimeout as e:
+        raise CliError(str(e))
+    _emit(args, snap, "reached state {0}".format(snap["state"]))
+    return 0
+
+
+def cmd_calibrate(args):
+    """Orchestrator helper: capture the game window + print its geometry.
+
+    Prints the window title, the client rect (screen coords), width/height, and a
+    DPI/coordinate-space diagnostic so the orchestrator can confirm that capture
+    size == client size == physical pixels (they all agree once the process is
+    per-monitor DPI aware -- e.g. ~1920x1080, NOT a scaled 1348x758). Optionally
+    writes a full-window PNG (``--out``). With ``--crop label left top right
+    bottom`` (image-local pixels, repeatable) it also saves button-template crops
+    into the config's templates dir. NO clicking ever happens here.
+    """
+    from . import automation_config as acfg
+    from . import winauto
+
+    # DPI awareness must already be set (cli.main + winauto import both do it);
+    # re-assert defensively and record the resolved mode for the diagnostic.
+    dpi_result = winauto.ensure_dpi_aware()
+
+    try:
+        config = acfg.load_config(args.config)
+    except acfg.ConfigError as e:
+        raise CliError(str(e))
+
+    window = _find_window_or_raise(config)
+    vmetrics = winauto.virtual_screen_metrics()
+    dpi_scale = winauto.window_dpi_scale(window["hwnd"])
+    payload = {
+        "title": window["title"],
+        "hwnd": window["hwnd"],
+        "client_rect": list(window["client_rect"]),
+        "width": window["width"],
+        "height": window["height"],
+        "deps": winauto.deps_status(),
+        "dpi": {
+            "awareness": dpi_result,
+            "virtual_screen": list(vmetrics) if vmetrics else None,
+            "window_scale": dpi_scale,
+        },
+        "capture_size": None,
+        "captured_png": None,
+        "templates": [],
+    }
+
+    # Always capture the client area (cheap) so the diagnostic can report the
+    # captured image size for the space-agreement check; keep the PNG only if
+    # asked. Crops also need the image.
+    image = None
+    try:
+        image = winauto.capture(window["client_rect"])
+    except winauto.AutomationDepsMissing as e:
+        # No mss/numpy: can't capture, but still print the geometry + DPI report.
+        if args.out or args.crop:
+            raise CliError(str(e))
+    if image is not None:
+        h, w = image.shape[:2]
+        payload["capture_size"] = [int(w), int(h)]
+        if args.out:
+            winauto.save_png(image, args.out)
+            payload["captured_png"] = str(args.out)
+
+    # Optional template crops: each --crop is LABEL L T R B in client-local px.
+    if args.crop:
+        tdir = acfg.templates_dir(config)
+        tdir.mkdir(parents=True, exist_ok=True)
+        for spec in args.crop:
+            if len(spec) != 5:
+                raise CliError(
+                    "--crop expects LABEL LEFT TOP RIGHT BOTTOM; got {0}".format(spec)
+                )
+            label = spec[0]
+            try:
+                box = tuple(int(v) for v in spec[1:])
+            except ValueError:
+                raise CliError("--crop coords must be integers: {0}".format(spec))
+            crop_img = winauto.crop(image, box)
+            out_path = tdir / "{0}.png".format(label)
+            winauto.save_png(crop_img, str(out_path))
+            payload["templates"].append(str(out_path))
+
+    # Space-agreement verdict: capture size SHOULD equal the client size now that
+    # everything is physical pixels. A mismatch means the process is still
+    # DPI-scaled somewhere (capture would be ~1.5x the logical client rect).
+    vm = payload["dpi"]["virtual_screen"]
+    cap = payload["capture_size"]
+    scale = payload["dpi"]["window_scale"]
+    if cap is None:
+        agree = "n/a (no mss/numpy; install sims4ctl[automation] to verify)"
+    elif cap == [payload["width"], payload["height"]]:
+        agree = "OK  capture {0}x{1} == client {2}x{3} (same physical space)".format(
+            cap[0], cap[1], payload["width"], payload["height"]
+        )
+    else:
+        agree = (
+            "MISMATCH  capture {0}x{1} != client {2}x{3} -- coordinate spaces "
+            "disagree (still DPI-scaled?)".format(
+                cap[0], cap[1], payload["width"], payload["height"]
+            )
+        )
+
+    human = (
+        "window  : {0!r} (hwnd={1})\n"
+        "client  : rect={2} size={3}x{4}\n"
+        "dpi     : awareness={5}\n"
+        "          virtual_screen={6}  window_scale={7}\n"
+        "capture : size={8}\n"
+        "spaces  : {9}\n"
+        "deps    : {10}".format(
+            payload["title"], payload["hwnd"], payload["client_rect"],
+            payload["width"], payload["height"],
+            payload["dpi"]["awareness"],
+            vm, ("{0:.2f}x".format(scale) if scale else "unknown"),
+            cap, agree,
+            payload["deps"],
+        )
+    )
+    if payload["captured_png"]:
+        human += "\npng     : {0}".format(payload["captured_png"])
+    if payload["templates"]:
+        human += "\ntemplates:\n  " + "\n  ".join(payload["templates"])
+    _emit(args, payload, human)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # argument parser
 # ---------------------------------------------------------------------------
+
+# scenarios/ lives at the repo root: host/sims4ctl/cli.py -> ../../scenarios
+_SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "scenarios"
+
 
 def build_parser():
     p = argparse.ArgumentParser(
@@ -355,6 +862,13 @@ def build_parser():
         type=float,
         default=0.1,
         help="how often to poll response.json, in seconds (default 0.1)",
+    )
+    p.add_argument(
+        "--poll",
+        type=float,
+        default=1.0,
+        help="how often to re-check the game STATE machine, in seconds "
+        "(default 1.0; used by start/stop/load-save/wait-for)",
     )
 
     sub = p.add_subparsers(dest="cmd")
@@ -385,6 +899,13 @@ def build_parser():
         help="which slice of state (default: all)",
     )
     sp.add_argument("--career", default=None, help="restrict career state to NAME")
+    sp.add_argument(
+        "--menu-aware",
+        dest="menu_aware",
+        action="store_true",
+        help="report the gamestate (DOWN/MENU/LOADING/ZONE_LOADED) instead of "
+        "in-zone state; works with no bridge and never blocks on a timeout",
+    )
     sp.set_defaults(func=cmd_state)
 
     sp = sub.add_parser("advance", help="fast-forward game time")
@@ -413,12 +934,116 @@ def build_parser():
         "doctor", help="print resolved paths + heartbeat freshness"
     ).set_defaults(func=cmd_doctor)
 
+    # -- Recipe B autonomous-loop commands ----------------------------------
+
+    sp = sub.add_parser("start", help="launch TS4 and wait for the main MENU")
+    sp.add_argument(
+        "--exe",
+        action="store_true",
+        help="force launching the raw TS4_x64.exe instead of steam://rungameid "
+        "(only works if EA Desktop is already running)",
+    )
+    sp.set_defaults(func=cmd_start)
+
+    sp = sub.add_parser("stop", help="terminate TS4_x64.exe (optionally save first)")
+    sp.add_argument(
+        "--save",
+        action="store_true",
+        help="best-effort in-game save via the bridge before killing (a zone "
+        "must be loaded; TS4 does not autosave on exit)",
+    )
+    sp.set_defaults(func=cmd_stop)
+
+    sp = sub.add_parser(
+        "load-save",
+        help="click out of the menu into a loaded save, then wait for ZONE_LOADED",
+    )
+    grp = sp.add_mutually_exclusive_group()
+    grp.add_argument(
+        "--continue",
+        dest="continue_",
+        action="store_true",
+        help="click 'Spiel fortsetzen' = load the most-recent save (default)",
+    )
+    grp.add_argument(
+        "--slot",
+        type=int,
+        default=None,
+        help="instead open 'Spiel laden' and load this slot id (decimal)",
+    )
+    sp.add_argument(
+        "--no-dismiss",
+        action="store_true",
+        help="do NOT attempt to dismiss the startup MODS dialog first",
+    )
+    sp.add_argument(
+        "--config",
+        default=None,
+        help="path to an automation config JSON (else $SIMS4CTL_AUTOMATION_CONFIG "
+        "or the shipped default)",
+    )
+    sp.set_defaults(func=cmd_load_save)
+
+    sp = sub.add_parser("new-game", help="click 'Neues Spiel' (optional/stub)")
+    sp.add_argument("--config", default=None, help="path to an automation config JSON")
+    sp.set_defaults(func=cmd_new_game)
+
+    sp = sub.add_parser("run-scenario", help="run scenarios/<name>.py")
+    sp.add_argument("name", help="scenario module name (without .py)")
+    sp.add_argument(
+        "--auto",
+        action="store_true",
+        help="ensure ZONE_LOADED first (start + load-save --continue as needed)",
+    )
+    sp.add_argument(
+        "--config", default=None, help="path to an automation config JSON (for --auto)"
+    )
+    sp.set_defaults(func=cmd_run_scenario, slot=None, no_dismiss=False)
+
+    sp = sub.add_parser("wait-for", help="block until a gamestate is reached")
+    sp.add_argument(
+        "state",
+        help="target state: DOWN, MENU, LOADING, or ZONE_LOADED (case-insensitive)",
+    )
+    sp.set_defaults(func=cmd_wait_for)
+
+    sp = sub.add_parser(
+        "calibrate",
+        help="capture the window + print rect/size (no clicking); --out PNG, "
+        "--crop LABEL L T R B to save template crops",
+    )
+    sp.add_argument(
+        "--out", default=None, help="write the captured client area to this PNG"
+    )
+    sp.add_argument(
+        "--crop",
+        nargs=5,
+        action="append",
+        metavar=("LABEL", "L", "T", "R", "B"),
+        help="save a template crop: LABEL LEFT TOP RIGHT BOTTOM (client-local "
+        "pixels); repeatable",
+    )
+    sp.add_argument("--config", default=None, help="path to an automation config JSON")
+    sp.set_defaults(func=cmd_calibrate)
+
     return p
 
 
 def main(argv=None):
     """Entry point. Returns/sets an int exit code; never lets an expected
     failure escape as a traceback."""
+    # Establish per-monitor DPI awareness as the very first thing, before any
+    # window/coords/capture call, so all coordinate spaces (mss capture,
+    # GetClientRect, the SendInput virtual-screen mapping, template matches) live
+    # in the same PHYSICAL-pixel space. Never raises; idempotent with winauto's
+    # own import-time call.
+    try:
+        from . import winauto
+
+        winauto.ensure_dpi_aware()
+    except Exception:
+        pass
+
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

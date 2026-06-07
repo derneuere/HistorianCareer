@@ -129,6 +129,33 @@ the raw JSON result.
 | `launch`                        | no | Starts `TS4_x64.exe` (Steam default `C:/Program Files (x86)/Steam/steamapps/common/The Sims 4/Game/Bin/TS4_x64.exe`). |
 | `doctor`                        | no | Prints the resolved USERDATA/Mods/bridge directories and reports heartbeat freshness + game-folder detection. |
 
+### Recipe B — autonomous loop (launch → load save → run → quit)
+
+These commands close the **menu → loaded-save** gap that has no in-game Python
+API, by launching the game and synthesizing **mouse clicks** against configurable
+targets. The click coordinates/templates are **placeholders that must be
+calibrated** against the live game first — see [`docs/RECIPE_B.md`](docs/RECIPE_B.md).
+Driving the live game needs the optional deps: `pip install sims4ctl[automation]`
+(the base CLI stays dependency-free).
+
+| Command                          | Needs bridge? | What it does |
+|----------------------------------|:-------------:|--------------|
+| `start [--exe]`                  | no | Launch TS4 (`steam://rungameid/<appid>`, appid read from `steam_appid.txt`; `--exe` forces the raw exe) and wait for the main **MENU**. |
+| `stop [--save]`                  | optional | With `--save` and a zone loaded, best-effort in-game `save` via the bridge, then `taskkill /IM TS4_x64.exe` (`/F` fallback). TS4 does not autosave on exit. |
+| `load-save [--continue \| --slot N]` | yes (to confirm) | Focus the window, optionally dismiss the startup MODS dialog, click **Spiel fortsetzen** (Continue, default) or **Spiel laden → slot → confirm**, then wait for **ZONE_LOADED**. |
+| `new-game`                       | no | Click **Neues Spiel** (stub — does not automate CAS to a zone). |
+| `run-scenario <name> [--auto]`   | yes | Run `scenarios/<name>.py`. `--auto` ensures ZONE_LOADED first (`start` + `load-save --continue` as needed). Exit code is the scenario's. |
+| `wait-for <state> [--timeout]`   | for ZONE_LOADED | Block until `DOWN`/`MENU`/`LOADING`/`ZONE_LOADED` or time out (non-zero). |
+| `state --menu-aware`             | no | Report the gamestate (`DOWN`/`MENU`/`LOADING`/`ZONE_LOADED`) instead of in-zone state; never blocks on the bridge. |
+| `calibrate [--out PNG] [--crop LABEL L T R B]` | no | Capture the game window and print its client rect + size so click coordinates can be derived; optionally save a PNG and template crops. **No clicking.** |
+
+The loop uses a **file+process+window state machine** (`gamestate.py`), OS
+primitives (`winauto.py`), a reserved disposable **test save slot
+`Slot_000000FF`** (`saves.py`, with read-only baseline backup/restore so runs
+are repeatable and never clobber player saves), and a configurable
+`host/sims4ctl/automation_config.json` of click targets. Full write-up:
+[`docs/RECIPE_B.md`](docs/RECIPE_B.md).
+
 ### State topics
 
 | Topic    | Shape |
@@ -181,9 +208,12 @@ files, never the game.
 
 - **No headless mode.** The game must be running with its full UI; there is no
   server/headless build to drive.
-- **No save-load CLI argument.** For the MVP you must **load a save manually** from the
-  main menu. The bridge reports `zone_loaded: false` until you do, and state verbs have
-  nothing to return until a zone is loaded.
+- **No save-load CLI argument / Python API.** The game offers no way to load a save
+  from code. You can still **load manually** from the main menu, or use the **Recipe B**
+  input-automation commands (`start` → `load-save` → … ; see the Recipe B table above and
+  `docs/RECIPE_B.md`) which drive the menu with synthetic mouse clicks. The bridge reports
+  `zone_loaded: false` until a zone is loaded, and state verbs have nothing to return until
+  then.
 - **Time only advances when the game is actually simulating.** `advance` won't move the
   clock while the game is **paused**, in a **modal dialog**, or in **CAS/Build/Buy**.
   Blocking interactions can also force the clock back to normal speed. Treat `advance`

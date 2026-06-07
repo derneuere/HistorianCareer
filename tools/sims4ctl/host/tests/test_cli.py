@@ -131,5 +131,91 @@ class DoctorCliTest(unittest.TestCase):
             shutil.rmtree(ud, ignore_errors=True)
 
 
+class RecipeBCliTest(unittest.TestCase):
+    """The Recipe B subcommands must parse + run dep-free with no game.
+
+    These are hermetic regardless of whether a real game is running on the dev
+    box: the menu-aware/wait-for tests monkeypatch the process check, and the
+    window-dependent tests point at a temp config whose title substring CANNOT
+    match any real window (so find_game_window returns None -> CliError -> 2).
+    We never drive the live game.
+    """
+
+    NO_MATCH_TITLE = "ZZZ_NO_SUCH_WINDOW_TITLE_XYZ"
+
+    def setUp(self):
+        self.ud = tempfile.mkdtemp()
+        # A temp automation config whose window title never matches a real
+        # window, so window-backed commands fail deterministically.
+        import json
+
+        self.cfg_path = os.path.join(self.ud, "automation_config.json")
+        with open(self.cfg_path, "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "window_title_substr": self.NO_MATCH_TITLE,
+                    "templates_dir": "templates",
+                    "targets": {
+                        "continue": {"norm": [0.5, 0.45]},
+                        "mods_dialog_dismiss": {"enabled": False, "norm": [0.5, 0.6]},
+                    },
+                },
+                fh,
+            )
+        # Force the process check to report DOWN for the state-machine tests so
+        # they don't depend on whether TS4 is actually running here.
+        from sims4ctl import gamestate
+
+        self._orig_proc = gamestate.is_process_running
+        gamestate.is_process_running = lambda name=gamestate.TS4_PROCESS_NAME: False
+
+    def tearDown(self):
+        from sims4ctl import gamestate
+
+        gamestate.is_process_running = self._orig_proc
+        import shutil
+
+        shutil.rmtree(self.ud, ignore_errors=True)
+
+    def test_state_menu_aware_reports_down_with_no_game(self):
+        # Process forced DOWN, no heartbeat -> DOWN, and it must NOT block on a
+        # bridge timeout (menu-aware path never calls the bridge).
+        rc = cli.main(["--userdata", self.ud, "state", "--menu-aware"])
+        self.assertEqual(rc, 0)
+
+    def test_state_menu_aware_json(self):
+        rc = cli.main(["--userdata", self.ud, "--json", "state", "--menu-aware"])
+        self.assertEqual(rc, 0)
+
+    def test_wait_for_rejects_unknown_state(self):
+        rc = cli.main(["--userdata", self.ud, "wait-for", "BOGUS"])
+        self.assertEqual(rc, 2)  # CliError -> exit 2
+
+    def test_wait_for_times_out_nonzero(self):
+        # Wait for ZONE_LOADED with the process forced DOWN -> times out -> exit 2.
+        rc = cli.main(
+            ["--userdata", self.ud, "--timeout", "0.3", "--poll", "0.05",
+             "wait-for", "ZONE_LOADED"]
+        )
+        self.assertEqual(rc, 2)
+
+    def test_load_save_without_window_fails_cleanly(self):
+        # No matching game window -> find_game_window None -> CliError -> exit 2.
+        rc = cli.main(
+            ["--userdata", self.ud, "load-save", "--continue", "--config", self.cfg_path]
+        )
+        self.assertEqual(rc, 2)
+
+    def test_calibrate_without_window_fails_cleanly(self):
+        rc = cli.main(
+            ["--userdata", self.ud, "calibrate", "--config", self.cfg_path]
+        )
+        self.assertEqual(rc, 2)
+
+    def test_run_scenario_unknown_name_fails_cleanly(self):
+        rc = cli.main(["--userdata", self.ud, "run-scenario", "no_such_scenario_xyz"])
+        self.assertEqual(rc, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

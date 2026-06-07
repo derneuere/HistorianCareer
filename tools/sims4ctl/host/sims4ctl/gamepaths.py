@@ -32,6 +32,12 @@ DEFAULT_TS4_EXE = Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\The Sims 4\Game\Bin\TS4_x64.exe"
 )
 
+# Steam appid for The Sims 4 (the base game). Used to build a
+# ``steam://rungameid/<appid>`` launch URL when the raw exe path won't entitle
+# the Steam/EA copy on its own. We prefer to read the real value from the game's
+# ``steam_appid.txt`` (sits next to TS4_x64.exe) and fall back to this constant.
+DEFAULT_TS4_APPID = "1222670"
+
 
 def ea_documents_dir():
     """Return ``~/Documents/Electronic Arts`` as a Path (may not exist)."""
@@ -113,6 +119,26 @@ def find_ts4_exe():
     """Return the path to ``TS4_x64.exe`` if it exists at the default Steam Bin
     location, else ``None`` (the CLI's ``launch`` reports a helpful error)."""
     return DEFAULT_TS4_EXE if DEFAULT_TS4_EXE.is_file() else None
+
+
+def find_steam_appid(exe=None):
+    """Return the Steam appid string for The Sims 4.
+
+    Reads ``steam_appid.txt`` from the game's Bin folder (next to
+    ``TS4_x64.exe``) when present -- that file contains just the numeric appid --
+    and falls back to :data:`DEFAULT_TS4_APPID` when the file or exe is absent.
+    Never raises; always returns a usable string so ``start`` can build a
+    ``steam://rungameid/<appid>`` URL.
+    """
+    exe_path = Path(exe) if exe else DEFAULT_TS4_EXE
+    appid_file = exe_path.parent / "steam_appid.txt"
+    try:
+        text = appid_file.read_text(encoding="utf-8").strip()
+        if text:
+            return text.splitlines()[0].strip()
+    except OSError:
+        pass
+    return DEFAULT_TS4_APPID
 
 
 def resolve_all(userdata=None):

@@ -1,12 +1,18 @@
 # bridge.py - the heart of the in-game bridge.
 #
-# install() hooks `zone.Zone.do_zone_spin_up`; once a zone has spun up on the
-# main thread, _on_zone_loaded() starts a repeating REAL-TIME alarm whose
-# callback runs drain(). drain() refreshes heartbeat.json, reads request.json,
-# and when request.seq > last_handled_seq executes the verb ON THE MAIN THREAD
-# and writes response.json with the same seq. (We do NOT use core_services.on_tick:
-# `core_services` is not an importable module in TS4 1.124.55 -- see the note by
-# the imports below.)
+# install() wires TWO drain sources, both firing drain() ON THE MAIN THREAD:
+#   (1) MAIN MENU (pre-zone): we wrap `areaserver.c_api_server_tick`, a
+#       module-level per-frame main-thread tick the game fires even at the menu,
+#       so commands are serviced BEFORE a save is loaded.
+#   (2) IN-ZONE: we hook `zone.Zone.do_zone_spin_up`; once a zone has spun up,
+#       _on_zone_loaded() starts a repeating REAL-TIME alarm whose callback runs
+#       drain().
+# drain() refreshes heartbeat.json, reads request.json, and when
+# request.seq > last_handled_seq executes the verb ON THE MAIN THREAD and writes
+# response.json with the same seq. It is wall-clock throttled so the same body is
+# safe to call from BOTH the paced alarm and the high-frequency frame tick. (We
+# do NOT use core_services.on_tick: `core_services` is not an importable module
+# in TS4 1.124.55 -- see the note by the imports below.)
 #
 # THE ONE HARD RULE (see _BUILD_SPEC.md): drain() runs from the alarm callback,
 # which fires on the main simulation thread -- that is precisely why we can touch
@@ -30,9 +36,12 @@ from . import state
 # NOTE: `core_services` is NOT an importable top-level module in TS4 1.124.55
 # (verified against the game's own scripts). The per-frame `on_tick` lives on
 # service CLASSES (game_services etc.), not a global module, and nothing is
-# importable that early anyway. We therefore drive the drain from a repeating
-# REAL-TIME ALARM started at zone-spin-up (both `zone.Zone.do_zone_spin_up` and
-# `alarms.add_alarm_real_time` are confirmed present). See install() below.
+# importable that early anyway. So IN A LOADED ZONE we drive the drain from a
+# repeating REAL-TIME ALARM started at zone-spin-up (both
+# `zone.Zone.do_zone_spin_up` and `alarms.add_alarm_real_time` are confirmed
+# present). At the MAIN MENU there is no zone and the alarm timeline is torn
+# down, so we ALSO wrap `areaserver.c_api_server_tick` -- a module-level,
+# main-thread, per-frame tick that fires pre-zone. See install() below.
 
 try:
     import services
@@ -56,6 +65,7 @@ except Exception:
 # ---------------------------------------------------------------------------
 
 _zone_hook_installed = False
+_menu_hook_installed = False
 _drain_loop_started = False
 # The repeating alarm registers its AlarmHandle in a WEAK-ref table: if we drop
 # the handle it is garbage-collected and the alarm is hard-stopped (verified in
@@ -66,8 +76,17 @@ _last_handled_seq = None  # None until recovered/initialized
 _seq_recovered = False
 
 # The drain runs from a repeating real-time alarm (see _start_drain_loop); this
-# interval sets the bridge's command latency and heartbeat cadence.
+# interval sets the bridge's command latency and heartbeat cadence. It ALSO
+# doubles as the wall-clock throttle for drain() itself (see _last_drain_ts):
+# drain() is now called from TWO sources -- the 0.5s alarm (in a loaded zone)
+# AND the high-frequency main-menu frame tick (areaserver.c_api_server_tick,
+# ~30-60 Hz, pre-zone). The throttle makes drain() safe to call from both.
 DRAIN_INTERVAL_REAL_SECONDS = 0.5
+
+# Wall-clock timestamp of the last drain that did real work (heartbeat + request
+# read). Used to throttle drain() to at most once per DRAIN_INTERVAL_REAL_SECONDS
+# regardless of how fast the caller fires. 0.0 == "never drained yet".
+_last_drain_ts = 0.0
 
 
 def _recover_last_seq():
@@ -248,6 +267,22 @@ def _verb_advance(args):
     return state.serialize_clock()
 
 
+def _verb_load_save(args):
+    """STUB: load a save slot. There is no Python-callable save-load API in TS4
+    1.124.55 -- loading a save is driven from the OUTSIDE by input automation
+    (Recipe B), not from inside the bridge. We answer honestly (ok=true with a
+    'not supported here' result, NOT an error) so the host CLI's future
+    `load-save` command has a verb to call and gets a clear, parseable reason."""
+    args = args or {}
+    slot = args.get("slot")  # int|str|None -- accepted but not actionable here
+    return {
+        "loaded": False,
+        "slot": slot,
+        "reason": "no Python load API in 1.124.55; load is driven by input "
+                  "automation (Recipe B)",
+    }
+
+
 # Dispatch table: verb name -> handler(args) -> JSON-able result.
 _DISPATCH = {
     "ping": _verb_ping,
@@ -255,6 +290,7 @@ _DISPATCH = {
     "eval": _verb_eval,
     "state": _verb_state,
     "advance": _verb_advance,
+    "load_save": _verb_load_save,
 }
 
 
@@ -300,9 +336,24 @@ def _handle_request(req):
 
 def drain():
     """Throttled poll: refresh heartbeat, read request, handle if new. Runs on
-    the MAIN THREAD (inside on_tick). Never raises."""
-    global _tick_count
+    the MAIN THREAD -- from the in-zone real-time alarm (every 0.5s) AND/OR the
+    main-menu frame tick (areaserver.c_api_server_tick, ~30-60 Hz). Never raises.
+
+    Throttled by wall-clock to at most once per DRAIN_INTERVAL_REAL_SECONDS, so
+    it is safe to call from BOTH the (already-paced) alarm and the high-frequency
+    frame tick without doing 30-60x the real IO. _tick_count only advances on a
+    drain that actually does work, keeping the heartbeat tick meaningful."""
+    global _tick_count, _last_drain_ts
     try:
+        # Wall-clock throttle. Calls arriving inside the interval are dropped
+        # cheaply (no FS touch) -- this is what makes the high-frequency menu
+        # tick affordable. time.time() can step backwards on a clock change, so
+        # treat a negative delta as "due" rather than waiting it out.
+        now = time.time()
+        delta = now - _last_drain_ts
+        if 0.0 <= delta < DRAIN_INTERVAL_REAL_SECONDS:
+            return
+        _last_drain_ts = now
         _tick_count += 1
         _recover_last_seq()
         # Heartbeat (every drain; cadence set by the alarm interval).
@@ -409,10 +460,81 @@ def _on_zone_loaded(zone_obj):
         pass
 
 
+def _install_menu_hook():
+    """Add a SECOND drain source that services commands at the MAIN MENU, before
+    any save is loaded.
+
+    The in-zone drain (zone spin-up hook + real-time alarm, see install() below)
+    only runs once a zone exists. To answer commands pre-zone we wrap
+    `areaserver.c_api_server_tick(absolute_ticks)` -- a module-level, per-frame,
+    MAIN-THREAD tick that the game fires even at the menu (verified from the
+    game's areaserver bytecode: a top-level function, single positional arg).
+    Unlike `core_services` (not importable) and alarms (timeline torn down at the
+    menu), this tick is live pre-zone. The wrapper calls drain() (wall-clock
+    throttled, so the ~30-60 Hz frame rate costs ~2 real drains/sec) then defers
+    to the original.
+
+    `areaserver` may or may not be importable this early (core_services wasn't),
+    so we just attempt + log honestly; we never crash. Idempotent via a marker
+    attr on the wrapper and the module-level _menu_hook_installed flag.
+
+    The two log lines below are read VERBATIM by the live experiment -- keep them
+    stable.
+    """
+    global _menu_hook_installed
+    if _menu_hook_installed:
+        return
+    try:
+        import areaserver
+    except Exception as e:
+        protocol.log(
+            "areaserver unavailable at import; menu hook NOT installed: "
+            "{0}".format(e))
+        return
+    try:
+        original = getattr(areaserver, "c_api_server_tick", None)
+        if original is None:
+            protocol.log(
+                "areaserver has no c_api_server_tick; menu hook NOT installed.")
+            return
+        if getattr(original, "_s4ctl_menu_patched", False):
+            _menu_hook_installed = True
+            return  # already wrapped (module re-imported)
+
+        @functools.wraps(original)
+        def patched(*args, **kwargs):
+            # drain() is wall-clock throttled and never raises, but guard anyway
+            # so a bug here can never disturb the game's per-frame server tick.
+            try:
+                drain()
+            except Exception:
+                pass
+            return original(*args, **kwargs)
+
+        patched._s4ctl_menu_patched = True
+        patched._s4ctl_original = original
+        areaserver.c_api_server_tick = patched
+        _menu_hook_installed = True
+        protocol.log("menu drain hook installed: areaserver.c_api_server_tick")
+    except Exception as e:
+        protocol.log(
+            "areaserver unavailable at import; menu hook NOT installed: "
+            "{0}\n{1}".format(e, traceback.format_exc()))
+
+
 def install():
-    """Hook zone.Zone.do_zone_spin_up so the drain loop starts on the main
-    thread once a zone loads. Idempotent; safe on re-import; never raises."""
+    """Install BOTH drain sources, idempotently, never raising:
+
+      1. the MAIN-MENU hook (areaserver.c_api_server_tick) so commands are
+         serviced pre-zone (see _install_menu_hook), and
+      2. the IN-ZONE hook (zone.Zone.do_zone_spin_up) that starts the repeating
+         real-time alarm once a zone has spun up.
+
+    Both are attempted on every call; one failing never blocks the other."""
     global _zone_hook_installed
+    # (1) Menu drain source first -- it's the only thing that works pre-zone, and
+    # attempting it must not depend on the zone hook below succeeding.
+    _install_menu_hook()
     if _zone_hook_installed:
         return
     try:

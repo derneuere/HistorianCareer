@@ -9,7 +9,25 @@ description = "Game-generic CLI to drive & inspect a running The Sims 4 from out
 readme = "README.md"
 requires-python = ">=3.8"
 # stdlib only — no runtime dependencies, by design (zero-dep wire protocol).
+# The base CLI (ping/cmd/state/advance/crashes/install/launch/doctor and the
+# menu-aware state machine) works with NO third-party packages.
 dependencies = []
+
+# Optional "Recipe B" input-automation extra: the OS-level window/capture/click
+# primitives in winauto.py import these LAZILY, so they are only required to
+# actually DRIVE the live game (launch -> dismiss dialog -> click -> load). The
+# whole base CLI + test suite run without them installed.
+#   pip install sims4ctl[automation]
+# pydirectinput is an optional fallback input backend; the default click path is
+# pure ctypes SendInput and needs none of these for the *code* to import.
+[project.optional-dependencies]
+automation = [
+    "pywin32; platform_system == 'Windows'",
+    "mss",
+    "opencv-python",
+    "numpy",
+    "pydirectinput",
+]
 
 [project.scripts]
 sims4ctl = "sims4ctl.cli:main"
@@ -22,3 +40,8 @@ package-dir = {"" = "host"}
 [tool.setuptools.packages.find]
 where = ["host"]
 include = ["sims4ctl*"]
+
+# Ship the Recipe B automation config (placeholder click targets) and any
+# calibrated template PNGs so they're available to an installed sims4ctl.
+[tool.setuptools.package-data]
+sims4ctl = ["automation_config.json", "templates/*.png"]
