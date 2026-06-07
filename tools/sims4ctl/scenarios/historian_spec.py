@@ -22,6 +22,11 @@ imports. Importable from anywhere (Python 3.7+ for parity with the bridge).
 CAREER_NAME = "career_Adult_Historian"          # Tuning/career_Adult_Historian.xml
 TRACK_NAME = "career_track_Adult_Historian"     # Tuning/career_track_Adult_Historian.xml
 
+# The HiWi fast-track is now a SEPARATE find-a-job entry (its own Career + Track)
+# instead of an in-place start-level modifier on the regular career.
+HIWI_CAREER_NAME = "career_Adult_Historian_HiWi"        # Tuning/career_Adult_Historian_HiWi.xml
+HIWI_TRACK_NAME = "career_track_Adult_Historian_HiWi"   # Tuning/career_track_Adult_Historian_HiWi.xml
+
 # ---------------------------------------------------------------------------
 # Pay schedule + titles (1-indexed by user_level).
 # Source: Tuning/career_level_Adult_Historian_L{1..10}.xml (simoleons_per_hour)
@@ -52,10 +57,13 @@ MAX_LEVEL = 10
 
 # ---------------------------------------------------------------------------
 # Discover University fast-track.
-# Source: Tuning/career_Adult_Historian.xml <U n="start_level_modifiers">.
-# Holding the hidden History-degree trait (230331 =
-# trait_University_DegreeTraits_History) adds +4 to the base start level of 1,
-# so a degree holder joins at L5 (HiWi) instead of L1.
+# Source: Tuning/career_Adult_Historian_HiWi.xml (a SEPARATE find-a-job entry).
+# The HiWi entry is degree-gated via career_availablity_tests on the hidden
+# History-degree trait (230331 = trait_University_DegreeTraits_History) and
+# carries an UNCONDITIONAL start_level_modifiers +4 on the base start level of 1,
+# so a degree holder who joins it starts at L5 (HiWi). The regular career_Adult_
+# Historian entry now always starts at L1 (its old in-place +4 modifier was
+# removed so degree holders aren't shown two entries that both jump to L5).
 # ---------------------------------------------------------------------------
 
 FAST_TRACK_TRAIT_ID = 230331

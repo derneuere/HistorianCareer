@@ -1,65 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Historian career. Single track, 10 levels, modelled on the German academic
-  Karriereleiter.
+  Historian career — HiWi fast-track entry (bug fix: "in the Job suchen dialog
+  the option to start at Level 5 is missing as a separate entry from the regular
+  job").
 
-  Per EA's Career TDESC (Build/simdata/test/fixtures/tdescs/Career.tdesc.json)
-  and the career_Adult_Writer / career_Teen_Retail goldens, a Career resource
-  carries a few mandatory fields (category, start_track, availability tests,
-  company_names, career_affordance, go_home_to_work_affordance, career_messages)
-  plus a handful of buff/modifier/test fields. The display name and description
-  live on the CareerTrack, not the Career — see career_track_Adult_Historian.xml.
+  This is a SECOND Career resource so the find-a-job picker shows a distinct
+  second row ("Historian (Research Assistant)") alongside the regular Historian
+  job. It is identical to career_Adult_Historian.xml EXCEPT:
 
-  Required for adult careers (this is what the smoke-test surfaced):
-    - company_names: non-empty list of STBL keys. The runtime picks one randomly
-      when the Sim joins; an empty list raises
-      `IndexError: Cannot choose from an empty sequence` from
-      `careers/career_location.py` (`TunableCareerLocationRandomCompanyWrapper`).
-    - career_affordance + go_home_to_work_affordance: the in-game affordances
-      that drive the "Join Career" interaction and the "Go Home From Work"
-      interaction. Reusing EA references is fine — `29941` is
-      `career_GoToWork_Writer` (well-matched to a research career), and `98770`
-      is the universal `career_GoHomeFromWork`.
-    - career_messages: the family of notifications shown around shifts, missed
-      work, promotions, demotions, firing, etc. Shape exactly mirrors EA's
-      career_Adult_Writer; we reuse EA's shipped STBL keys for the generic
-      "rough day at work"-style strings (0x57D2BC57 etc.) so we don't need to
-      author 8 new strings just for parity.
+    1. start_track -> career_track_Adult_Historian_HiWi (its own display name).
+    2. career_availablity_tests gains a History-degree trait requirement (230331,
+       Discover University) so the entry ONLY appears for degree holders — the
+       README design. On a base-game install (no DU, no trait) the entry simply
+       does not appear, which is expected.
+    3. start_level_modifiers is an UNCONDITIONAL +4, so joining this entry always
+       begins at user_level 5 (Wissenschaftliche Hilfskraft / HiWi). The regular
+       career_Adult_Historian entry always starts at L1 for everyone.
 
-  Requires the History major from the Discover University EP. The trait reference
-  `trait_University_Major_History_Completed` is a PLACEHOLDER — confirm the exact
-  EA trait name in Sims 4 Studio's Game File Cruiser at build time (see
-  IMPLEMENTATION_GUIDE.md and issue #2). The list of candidate names is also
-  baked into the Python safety net in
-  Scripts/historian_career/historian_career.py.
-
-  career_category MUST be `Work` (not `CAREER`) — every EA adult career uses
-  this literal and the simdata enum maps it to value 1.
+  Everything else (block_promotion_tests, career_affordance, career_messages,
+  career_location, days_to_level_loss, go_home_to_work_affordance, category)
+  mirrors career_Adult_Historian.xml so the two entries share identical gameplay
+  above the entry point. The ten CareerLevels are shared between both tracks.
 -->
-<I c="Career" i="career" m="careers.career_tuning" n="career_Adult_Historian" s="TBD_INSTANCE_ID">
+<I c="Career" i="career" m="careers.career_tuning" n="career_Adult_Historian_HiWi" s="TBD_INSTANCE_ID">
   <!--
-    block_promotion_tests: BLOCKS a promotion when any test-group PASSES.
-    Outer list is OR (any group passing -> block); each inner <L> group is AND.
-
-    To REQUIRE skill >= N at a specific transition, a group =
-      [career_level test for the FROM level] AND
-      [skill_test that passes only when skill is BELOW N -> skill_range upper_bound = N-1].
-    A multi-skill AND requirement (e.g. Writing>=2 AND Charisma>=1) is encoded
-    as TWO groups for the same FROM level (one per skill), since being below
-    EITHER skill must block the promotion.
-
-    Skills: Research & Debate = 221014, Writing = 16714, Charisma = 16699.
-    Locked gates per DESIGN: L1->L2, L6->L7, L7->L8, L8->L9, L9->L10.
-    The intermediate L2->L3..L5->L6 promotions are performance-only (no gate).
-
-    SKILL-TEST SHAPE (issue #32 in-game pass): the EA skill test variant is
-    `skill_test` (NOT `skill`), and the threshold is a `skill_range` interval
-    with an `upper_bound`, mirroring EA's own career-interaction tuning. The
-    earlier `V t=skill / U n=skill / T n=max_value` form did NOT resolve
-    in-game: the tuning loader fell back to the no-op `none` test, so every
-    gate silently passed through and `Career.is_promotion_blocked` raised
-    `'str' object has no attribute 'expected_kwargs'` whenever a gated level was
-    active. Verified live via sims4ctl after switching to `skill_test`.
+    Skill gates on promotion — identical to career_Adult_Historian. These are
+    keyed by the shared CareerLevel tunings, so the same gates apply when a HiWi
+    Sim promotes (L6->L7, L7->L8, L8->L9, L9->L10). The L1->L2 gate never
+    triggers here because this entry starts above L1.
   -->
   <L n="block_promotion_tests">
     <!-- L1->L2: Writing >= 2 (block while Writing <= 1 at L1). -->
@@ -236,33 +204,12 @@
   <T n="career_affordance">29941</T>
 
   <!--
-    Career availability tests.
-
-    TEMPORARILY relaxed: only the age check is enforced (YA/A/E) so the career
-    sticks in-game. The trait whitelist
-        trait_University_Major_History_Completed
-    is a documented PLACEHOLDER (issue #2) — the real EA trait name from the
-    Discover University EP has never been confirmed against the live game.
-    When `careers.add_career` is used, EA's tuning loader runs the placeholder
-    trait lookup, gets a null reference, and the periodic availability check
-    then evicts the Sim from the career within a frame ("Mirco hat keinen
-    Job." appears immediately after the join-notification popup).
-
-    TODO (issue #2 follow-up): once the canonical trait name is confirmed via
-    S4S Game File Cruiser, re-add the trait whitelist block:
-
-      <L>
-        <V t="trait">
-          <U n="trait">
-            <L n="whitelist_traits">
-              <T>trait_University_Major_History_Completed</T>
-            </L>
-          </U>
-        </V>
-      </L>
-
-    The Scripts/historian_career/historian_career.py safety net already lists
-    candidate trait names; we just haven't picked one yet.
+    Availability: young-adult+ AND the History-degree trait (230331). The trait
+    group is what makes this a degree-GATED separate entry: only Sims who hold
+    the Discover University History degree see it in the find-a-job picker. On a
+    base-game install the trait does not exist, so the test never passes and the
+    entry stays hidden (expected). Outer list is OR of groups; each inner <L> is
+    AND of its tests — here both groups must hold (age + trait).
   -->
   <L n="career_availablity_tests">
     <L>
@@ -278,29 +225,21 @@
         </U>
       </V>
     </L>
+    <L>
+      <V t="trait">
+        <U n="trait">
+          <L n="whitelist_traits">
+            <T>230331</T>
+          </L>
+        </U>
+      </V>
+    </L>
   </L>
 
   <E n="career_category">Work</E>
 
-  <!--
-    Career messages: notification family. Shape mirrors career_Adult_Writer (live
-    game). Where possible we reuse EA's shipped generic STBL keys for the
-    nameless "rough day"/"missed work"/"join career"/"fire career" strings,
-    and we provide HC-specific titles/bodies where it makes the in-game UX feel
-    less generic. The `stat` reference (27784) is EA's Writer career_performance
-    stat — we reuse it for parity; once HC_PerformanceStat_Historian is firmly
-    wired, swap to that.
-  -->
+  <!-- Career messages mirror career_Adult_Historian exactly. -->
   <U n="career_messages">
-    <!--
-      career_assignment_summary_notification: end-of-shift summary for the
-      work-from-home (WFH) path. Our career doesn't enable WFH today (no
-      work_from_home_text / career_early_warning_alarm), so this never fires
-      in practice; tuned here as a forward-compatibility stub with a single
-      always-matching record so that *if* WFH is ever enabled, the dialog
-      won't render empty (the same default-empty-TunableTuple class of bug
-      that bit us on join_career_notification and promote rewardless).
-    -->
     <V n="career_assignment_summary_notification" t="tested">
       <U n="tested">
         <L n="records">
@@ -315,13 +254,6 @@
         </L>
       </U>
     </V>
-    <!--
-      career_daily_end_notification: end-of-shift performance summary. EA's
-      Tunable list is named `records`, not `items` — we previously used `items`
-      which silently parsed as an unknown field and the list defaulted empty,
-      so neither the high- nor low-performance line ever rendered. Renamed to
-      match EA's Career Type Work shape.
-    -->
     <V n="career_daily_end_notification" t="tested">
       <U n="tested">
         <L n="records">
@@ -358,24 +290,11 @@
         </L>
       </U>
     </V>
-    <!--
-      career_daily_start_notification: "off to work" popup when the Sim leaves
-      for their shift. Title intentionally omitted (EA's Writer career also
-      omits it here). Text uses {0.SimFirstName}.
-    -->
     <U n="career_daily_start_notification">
       <V n="text" t="single">
         <T n="single">0xTBD_STBL_KEY_HC_CAREER_DAILY_START</T>
       </V>
     </U>
-    <!--
-      career_early_warning_alarm: the pre-shift action prompt. Tuning the
-      `enabled` variant with a work_from_home_text is what ENABLES the
-      Work-From-Home option for this career (EA's Education career uses the
-      same mechanism). The other fields (call_in_sick / dialog / go_to_work /
-      take_pto) reuse EA's shipped generic STBL keys for parity; only the WFH
-      label is HC-specific. Shape mirrors careers_Adult_Education (live game).
-    -->
     <V n="career_early_warning_alarm" t="enabled">
       <U n="enabled">
         <T n="call_in_sick_text">0x9291A330</T>
@@ -392,10 +311,6 @@
         <T n="work_from_home_text">0xTBD_STBL_KEY_HC_CAREER_WFH_TEXT</T>
       </U>
     </V>
-    <!--
-      career_early_warning_notification: "one hour to work" reminder. EA's
-      Writer career omits a title on this one too.
-    -->
     <U n="career_early_warning_notification">
       <V n="text" t="single">
         <T n="single">0xTBD_STBL_KEY_HC_CAREER_EARLY_WARNING</T>
@@ -467,19 +382,10 @@
           <T n="single">0xTBD_STBL_KEY_HC_CAREER_JOIN_NOTIFICATION</T>
         </V>
         <V n="title" t="enabled">
-          <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_NAME</T>
+          <T n="enabled">0xTBD_STBL_KEY_HC_CAREER_HIWI_NAME</T>
         </V>
       </U>
     </V>
-    <!--
-      overmax_notification / overmax_rewardless_notification: fire when the Sim
-      is already at the top career level (Full Professor W3) and continues to
-      hit performance thresholds — Sims 4 represents this as a "raise" rather
-      than a further promotion. The split mirrors promote_*_notification: the
-      reward-bearing form is used when the level grants a bonus item, the
-      rewardless form when it doesn't. We tune both with the same text/title
-      because our L5 has no bonus reward today.
-    -->
     <U n="overmax_notification">
       <V n="text" t="single">
         <T n="single">0xTBD_STBL_KEY_HC_CAREER_OVERMAX_NOTIFICATION</T>
@@ -504,15 +410,6 @@
         <T n="enabled">0x54E0293D</T>
       </V>
     </U>
-    <!--
-      promote_career_rewardless_notification: shown when the new level has no
-      bonus reward (none of our L1..L5 currently tune <U n="bonus">), which is
-      the path our promotions actually take. EA's career.py picks between the
-      two promote_* tunings based on whether the destination level grants a
-      reward; omitting this field made promotions silently render an empty
-      dialog. Body/title intentionally identical to promote_career_notification
-      because our text doesn't reference a bonus token.
-    -->
     <U n="promote_career_rewardless_notification">
       <V n="text" t="single">
         <T n="single">0xTBD_STBL_KEY_HC_CAREER_PROMOTE_NOTIFICATION</T>
@@ -531,24 +428,7 @@
     </U>
   </U>
 
-  <!--
-    Where Sims go to work. `career_location` is a TunableVariant; the default
-    variant is `company` (rabbit-hole, random company name picked from a list).
-
-    CRITICAL: this field MUST be wrapped in a <V n="career_location" t="company">
-    <U n="company">...</U></V> block per the TunableCareerLocationVariant TDESC
-    and Mod Constructor 5's TuneCompanyNames export pattern. The EA goldens we
-    extract via CombinedTuning show a *flattened* <L n="company_names"> at root,
-    but that's the serialization output — the source XML the runtime parses
-    needs the variant.
-
-    Without the variant wrapping, EA's TunableCareerLocationRandomCompany
-    constructor uses an EMPTY default list and crashes with
-    `IndexError: Cannot choose from an empty sequence` from
-    `careers/career_location.py` line 124 when a Sim joins the career.
-
-    German academic institutions, thematic.
-  -->
+  <!-- Same employers as the regular Historian career. -->
   <V n="career_location" t="company">
     <U n="company">
       <L n="company_names">
@@ -569,15 +449,20 @@
   <T n="levels_lost_on_leave">0</T>
 
   <!--
-    Discover University fast-track. This used to be an in-place start_level_modifiers
-    +4 (trait 230331 = History degree) that silently bumped degree holders to L5
-    when they joined THIS entry. That was replaced (bug fix: "the option to start
-    at Level 5 is missing as a separate entry") by a dedicated, degree-gated
-    second find-a-job entry — career_Adult_Historian_HiWi (+ its own track) —
-    which starts at L5. Keeping the auto-bump here too would give degree holders
-    two entries that both jump to L5; instead this regular entry now ALWAYS starts
-    at L1, so degree holders get a real choice (grind from L1, or take the HiWi
-    fast-track to L5). No start_level_modifiers => base start level 1 for everyone.
+    Unconditional +4 start: base start level is 1; this entry always adds 4 so a
+    Sim joining the HiWi track begins directly at L5 (Wissenschaftliche
+    Hilfskraft). No trait test inside the modifier is needed because the entry
+    is already degree-gated by career_availablity_tests above — every Sim who can
+    see/join it holds the History degree by definition.
   -->
-  <T n="start_track">career_track_Adult_Historian</T>
+  <U n="start_level_modifiers">
+    <L n="modifiers">
+      <U>
+        <T n="modifier">4</T>
+        <L n="tests"/>
+      </U>
+    </L>
+  </U>
+
+  <T n="start_track">career_track_Adult_Historian_HiWi</T>
 </I>

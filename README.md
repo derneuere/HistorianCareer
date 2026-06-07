@@ -22,7 +22,7 @@ This README is the single human-facing doc. It folds in what used to live under 
 2. Extract into `Documents\Electronic Arts\The Sims 4\Mods\HistorianCareer\`.
 3. Enable **Custom Content** and **Script Mods** in *Options → Other*. Restart the game.
 4. Delete `Documents\Electronic Arts\The Sims 4\localthumbcache.package` once.
-5. Make a young-adult+ Sim and apply via phone → *Find a Job* → **Historian**. No degree needed to start at L1. If your Sim completed the **History** major at university, they skip straight to **L5 Wissenschaftliche Hilfskraft** (see [Discover University fast-track](#discover-university-fast-track)).
+5. Make a young-adult+ Sim and apply via phone → *Find a Job* → **Historian**. No degree needed to start at L1. If your Sim completed the **History** major at university, a separate **Historian (Research Assistant)** entry also appears that starts at **L5 Wissenschaftliche Hilfskraft** (see [Discover University fast-track](#discover-university-fast-track)).
 
 Right-click a computer (or, at the right ranks, a bookshelf) to also see the **Historian** pie-menu category — flavour interactions that grant money, buffs, and progress independently of the job.
 
@@ -73,23 +73,23 @@ Schedules progress part-time → full-time → prestige: L1–L2 part-time morni
 
 ## Discover University fast-track
 
-The career is **open to anyone**. Hobbyhistoriker:in needs no degree.
+The career is **open to anyone**. Hobbyhistoriker:in needs no degree, and the regular **Historian** entry in *Find a Job* always starts at **L1**.
 
-**But** if the Sim has completed a History major from Discover University, they enter the career **directly at L5 Wissenschaftliche Hilfskraft**, skipping the four entry-track stages. This is a fast-track shortcut, not a hard gate — a Sim without the degree can still grind from L1 to L10.
+**But** if the Sim has completed a History major from Discover University, *Find a Job* shows a **second, separate entry** — **Historian (Research Assistant)** / *Historiker:in (Wiss. Hilfskraft)* — that starts **directly at L5 Wissenschaftliche Hilfskraft**, skipping the four entry-track stages. This is a fast-track shortcut, not a hard gate: a degree holder can still pick the regular entry and grind from L1, and a Sim without the degree simply doesn't see the HiWi entry.
 
-Implemented in pure tuning as a `start_level_modifiers` block on the Career resource: a `trait` test for the History-degree trait (**`trait_University_DegreeTraits_History` = 230331**, EA's hidden trait granted for any History degree) adds **+4** to the base start level of 1. No Python required for the start level itself; a Python safety-net also checks 230331.
+Implemented in pure tuning as a dedicated Career + CareerTrack pair (`career_Adult_Historian_HiWi` + `career_track_Adult_Historian_HiWi`):
 
-Knock-on changes from the original design:
+1. The HiWi Career is **degree-gated** via `career_availablity_tests` on the History-degree trait (**`trait_University_DegreeTraits_History` = 230331**, EA's hidden trait granted for any History degree), so the entry only appears for degree holders.
+2. It carries an **unconditional** `start_level_modifiers` **+4** on the base start level of 1, so joining it begins at L5.
+3. Both tracks share the same ten `career_level_Adult_Historian_L{1..10}` levels, so gameplay above the entry point is identical. The Python `.ts4script` (affordance level-gate + daily-task rotation) recognises a Sim in **either** entry.
 
-1. The old `career_availability_test` block (which made the whole career invisible without the degree) is **removed**.
-2. The trait test on the entry-rank Transcribe Manuscript affordance is **dropped** — by the time a Sim reaches that affordance's band, they either skip-hired with the degree or regular-promoted past the entry track, so the affordance's own trait gate is redundant.
-3. If a future patch renames the degree trait, the failure mode is now "fast-track stops working", not "career disappears" — resolve the trait name (see [Resolving EA trait/skill names](#resolving-ea-traitskill-names)) and rebuild.
+Because the HiWi entry is degree-gated, on a **base-game install** (no Discover University, so the trait never loads) it correctly does not appear — only the regular L1 Historian entry is shown. If a future patch renames the degree trait, the failure mode is "the HiWi entry stops appearing", not "the career disappears" — resolve the trait name (see [Resolving EA trait/skill names](#resolving-ea-traitskill-names)) and rebuild.
 
 ## Two layers, by intent
 
 **Layer A — custom interactions, anywhere.** Pie-menu work the Sim can run outside scheduled hours. Custom affordances are **per-rank** (each has a narrative band; an L10 Direktor:in no longer sees the L2 Museumswärter affordances), with EA precedent — the Law career's "File Court Documents" affordance is similarly band-gated. See [The ten-rank affordance map](#the-ten-rank-affordance-map).
 
-**Layer B — the actual job.** Apply via phone → Find a Job → Historian (or fast-track to L5). Full work schedule, **one randomly-rotated daily task per day** (script-driven), **two randomized Work-From-Home tasks per WFH shift** (pure-tuning EA pattern), promotion gates, the chance card, the *Historian's Calling* aspiration, and the *Habilitation Renown* reward trait at L9.
+**Layer B — the actual job.** Apply via phone → Find a Job → Historian (degree holders also get a separate "Historian (Research Assistant)" entry that starts at L5). Full work schedule, **one randomly-rotated daily task per day** (script-driven), **two randomized Work-From-Home tasks per WFH shift** (pure-tuning EA pattern), promotion gates, the chance card, the *Historian's Calling* aspiration, and the *Habilitation Renown* reward trait at L9.
 
 You can play with one or both. Layer B uses the `.ts4script` for two mechanics: (a) affordance injection onto EA computer / bookshelf / social super-affordances, and (b) per-day daily-task rotation.
 
@@ -382,7 +382,7 @@ careers.add_career career_Adult_Historian
 - [ ] No console error; career panel shows "Historian" at L1 "Hobbyhistoriker:in", §14/h.
 - [ ] Daily-task panel shows the L1 aspiration objective(s).
 
-A Sim with the History degree should instead **start at L5** (the `start_level_modifiers` fast-track). Test both: a degree-less Sim starts at L1; a degree holder starts at L5 Wissenschaftliche Hilfskraft.
+A Sim with the History degree should *also* see a **separate** *Find a Job* entry, **Historian (Research Assistant)**, that starts at **L5**. Test both: the regular **Historian** entry always starts at L1; the degree-only **Historian (Research Assistant)** entry starts at L5 Wissenschaftliche Hilfskraft. On a base-game install (no Discover University) only the regular entry appears.
 
 Jump through every rank (run repeatedly, cheating skills to clear gates):
 
@@ -417,8 +417,8 @@ careers.remove_career career_Adult_Historian
 
 ## Negative / gate tests
 
-- [ ] A degree-less Sim joins fine and starts at **L1** (the career is open to all — there is no availability gate anymore).
-- [ ] A History-degree Sim joins and starts at **L5** (fast-track).
+- [ ] A degree-less Sim joins the regular **Historian** entry fine and starts at **L1** (open to all — no availability gate), and sees **no** HiWi entry.
+- [ ] A History-degree Sim sees the separate **Historian (Research Assistant)** entry and joins it at **L5**; the regular Historian entry still starts at L1.
 - [ ] Promotion gates hold: e.g. with Writing = 1, L1 → L2 should refuse (needs Writing ≥ 2 AND Charisma ≥ 1); with Research & Debate = 9 OR Writing = 9, L8 → L9 should refuse (Habilitation needs both at 10).
 
 ## Stability test (before any release)

@@ -19,7 +19,50 @@
     <T>Interaction_Super</T>
     <T>Interaction_All</T>
   </L>
-  <V n="basic_content" t="one_shot"/>
+  <!--
+    Timed activity (bug fix: was t="one_shot", which completed instantly). The
+    Sim now sits at the computer and works for ~45-90 sim minutes before the
+    outcome loot fires, matching the feel of EA's own computer tasks. Modelled
+    on EA's computer_BlogAboutFeelings (s=24334): flexible_length with a
+    time_based EXIT_NATURALLY, the generic Computer_* staging mixers, and the
+    Computer_Use_Type canonical animation. All numeric refs are base-game.
+  -->
+  <V n="basic_content" t="flexible_length">
+    <U n="flexible_length">
+      <L n="conditional_actions">
+        <V t="literal">
+          <U n="literal">
+            <L n="conditions">
+              <V t="time_based">
+                <U n="time_based">
+                  <T n="max_time">90</T>
+                  <T n="min_time">45</T>
+                </U>
+              </V>
+            </L>
+            <E n="interaction_action">EXIT_NATURALLY</E>
+          </U>
+        </V>
+      </L>
+      <V n="content" t="staging_content">
+        <U n="staging_content">
+          <U n="content_set">
+            <L n="affordance_links">
+              <T>99858</T><!-- Computer_Use_React -->
+              <T>13197</T><!-- Computer_Chat_Keyboard -->
+              <T>13199</T><!-- Computer_Chat_Mouse -->
+              <T>10222</T><!-- Computer_Chat_Read -->
+            </L>
+          </U>
+        </U>
+      </V>
+    </U>
+  </V>
+  <V n="canonical_animation" t="enabled">
+    <U n="enabled">
+      <T n="factory">31395</T><!-- Computer_Use_Type -->
+    </U>
+  </V>
   <V n="outcome" t="single">
     <U n="single">
       <U n="actions">

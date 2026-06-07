@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HiWi fast-track entry for the Historian career (bug fix: "in the Job suchen
+  dialog the option to start at Level 5 is missing as a separate entry").
+
+  The Sims 4 find-a-job picker shows ONE row per Career resource, labelled by
+  that career's start_track career_name. To surface a *separate* "start at L5"
+  entry we add a second Career (career_Adult_Historian_HiWi) pointing at this
+  second track, which carries a distinct display name. Both tracks list the
+  SAME ten CareerLevels — the HiWi career just starts at user_level 5 via an
+  unconditional start_level_modifiers +4 (see career_Adult_Historian_HiWi.xml).
+
+  This entry is degree-gated on the History-degree trait (Discover University),
+  matching the README design — so on a base-game install it correctly does not
+  appear in the picker (no Sim can hold the trait). The regular Historian entry
+  remains open to everyone and always starts at L1.
+
+  Class/module match career_track_Adult_Historian.xml exactly (TunableCareerTrack
+  / careers.career_tuning); career_name/career_description live on the Track.
+-->
+<I c="TunableCareerTrack" i="career_track" m="careers.career_tuning" n="career_track_Adult_Historian_HiWi" s="TBD_INSTANCE_ID">
+  <T n="career_name">0xTBD_STBL_KEY_HC_CAREER_HIWI_NAME</T>
+  <T n="career_description">0xTBD_STBL_KEY_HC_CAREER_HIWI_DESCRIPTION</T>
+  <!--
+    Same ten levels as the regular track. The HiWi career begins at user_level 5
+    (career_level_Adult_Historian_L5) via its start_level_modifiers; levels 1-4
+    exist in the list but are simply never used by this entry — exactly how EA's
+    Discover University degree fast-track reuses a full track at a higher start.
+  -->
+  <L n="career_levels">
+    <T>career_level_Adult_Historian_L1</T>
+    <T>career_level_Adult_Historian_L2</T>
+    <T>career_level_Adult_Historian_L3</T>
+    <T>career_level_Adult_Historian_L4</T>
+    <T>career_level_Adult_Historian_L5</T>
+    <T>career_level_Adult_Historian_L6</T>
+    <T>career_level_Adult_Historian_L7</T>
+    <T>career_level_Adult_Historian_L8</T>
+    <T>career_level_Adult_Historian_L9</T>
+    <T>career_level_Adult_Historian_L10</T>
+  </L>
+  <!-- Reuse the same career icons as the main track. -->
+  <T n="icon" p="HistorianCareer\Career_Historian_Main.png">Career_Historian_Main.png</T>
+  <T n="icon_high_res" p="HistorianCareer\Career_Historian_Main.png">Career_Historian_Main.png</T>
+  <T n="image" p="InGame\UI\Icons\resource_icon_bkg.png">2f7d0004:00000000:6665077284098fa2</T>
+  <T n="busy_time_situation_picker_tooltip">0x77D1D57E</T>
+</I>

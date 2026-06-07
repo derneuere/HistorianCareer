@@ -43,7 +43,9 @@
     "HC_PROMO_TIER_10": "You are now an Institute Director.",
 
     "HC_CAREER_NAME": "Historian",
-    "HC_CAREER_DESCRIPTION": "Research the past, write the future. Requires a History degree (Discover University).",
+    "HC_CAREER_DESCRIPTION": "Research the past, write the future. Open to all — start at Level 1. (History graduates can instead take the Research Assistant fast-track to Level 5.)",
+    "HC_CAREER_HIWI_NAME": "Historian (Research Assistant)",
+    "HC_CAREER_HIWI_DESCRIPTION": "Enter academia directly as a Research Assistant (HiWi), starting at Level 5. Requires a History degree (Discover University).",
 
     "HC_COMPANY_UNIVERSITAET_BERLIN": "Universität Berlin",
     "HC_COMPANY_PREUSSISCHER_KULTURBESITZ": "Stiftung Preußischer Kulturbesitz",
@@ -177,7 +179,9 @@
     "HC_PROMO_TIER_10": "Sie sind jetzt Direktor:in.",
 
     "HC_CAREER_NAME": "Historiker:in",
-    "HC_CAREER_DESCRIPTION": "Erforsche die Vergangenheit, schreibe die Zukunft. Voraussetzung: Geschichtsstudium (Discover University).",
+    "HC_CAREER_DESCRIPTION": "Erforsche die Vergangenheit, schreibe die Zukunft. Für alle offen — Start auf Stufe 1. (Geschichtsabsolvent:innen können stattdessen den HiWi-Schnelleinstieg auf Stufe 5 nehmen.)",
+    "HC_CAREER_HIWI_NAME": "Historiker:in (Wiss. Hilfskraft)",
+    "HC_CAREER_HIWI_DESCRIPTION": "Steige direkt als Wissenschaftliche Hilfskraft (HiWi) auf Stufe 5 in die akademische Laufbahn ein. Voraussetzung: Geschichtsstudium (Discover University).",
 
     "HC_COMPANY_UNIVERSITAET_BERLIN": "Universität Berlin",
     "HC_COMPANY_PREUSSISCHER_KULTURBESITZ": "Stiftung Preußischer Kulturbesitz",

@@ -1,8 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Daily-task helper that reuses an existing EA interaction:
-  "Read a Book" — filtered to non-fiction. Falls back to the generic ReadBook affordance
-  if the non-fiction subtype filter doesn't resolve.
+  Daily-task helper that hooks into EA's existing "Read Book" interactions.
+
+  BUG FIX (issue: "Sachbuch lesen does not trigger after the sim read a book
+  from the bookshelf"): the objective_test previously referenced the affordance
+  by NAME (`book_ReadBook_NonFiction`), but (a) that tuning does not exist in the
+  game — EA has no "non-fiction"-specific read affordance — and (b) the build's
+  name resolver only rewrites OUR own tuning names to instance IDs; an unknown
+  EA name is left as a literal string, which EA's TunableReference loader cannot
+  resolve, so the affordance list ended up empty and the test never fired.
+
+  The Sims 4 has a single family of "Read" super-interactions that run on the
+  book object regardless of where the read was started (bookshelf picker, owned
+  book in inventory, etc.). We reference them by their real numeric instance IDs
+  (guid64), confirmed against the live game's CombinedTuning
+  (Data/Simulation/SimulationFullBuild0.package, patch 1.124.55):
+
+    13117  book_read                  main "Read" interaction
+    13118  book_readTooEasy           skill book below the Sim's level
+    13119  book_readTooHard           skill book above the Sim's level
+    76988  book_read_browse           "browse / read" variant
+    34322  book_read_ReadForReference reference reading (the most "Sachbuch"-like)
+
+  Reading any book from the bookshelf runs one of these, so the daily task now
+  completes as soon as the Sim finishes (or makes progress on) a read.
 
   Per EA's Objective TDESC (Build/simdata/test/fixtures/tdescs/Objective.tdesc.json):
     - module is `event_testing.objective_tuning` (not `aspirations.aspiration_objective`)
@@ -21,8 +42,11 @@
   <V n="objective_test" t="ran_interaction_test">
     <U n="ran_interaction_test">
       <L n="affordances">
-        <!-- EA's non-fiction read; swap to `book_Read` if this specific affordance is missing. -->
-        <T>book_ReadBook_NonFiction</T>
+        <T>13117</T><!-- book_read -->
+        <T>13118</T><!-- book_readTooEasy -->
+        <T>13119</T><!-- book_readTooHard -->
+        <T>76988</T><!-- book_read_browse -->
+        <T>34322</T><!-- book_read_ReadForReference -->
       </L>
     </U>
   </V>

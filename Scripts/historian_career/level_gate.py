@@ -26,9 +26,10 @@
 #
 # DESIGN NOTES
 #
-# - Identity comparison on `current_track_tuning` is correct: tuning classes
-#   are singletons within their InstanceManager, so `is` is the EA-canonical
-#   check (verified in CareerTrackTestFactory.__call__ bytecode at offset 56).
+# - Track check uses membership across the accepted Historian tracks
+#   (regular + HiWi fast-track). Tuning classes are singletons within their
+#   InstanceManager, so the `in`/`==` comparison reduces to the same identity
+#   check EA uses in CareerTrackTestFactory.__call__ (bytecode offset 56).
 # - Simless interactions and pre-CAS sim states are passed through with
 #   TestResult.TRUE so we never block engine paths that have no Sim context.
 # - The patch is idempotent: re-installing simply overwrites `_test` with the
@@ -105,11 +106,19 @@ def _gated_test(cls, target, context, **kwargs):
     if tracker is None:
         return TestResult(False, "Sim has no career_tracker.")
 
-    career = tracker.get_career_by_uid(cls._hc_career_uid)
+    # The Sim may be in EITHER Historian entry: the regular career_Adult_Historian
+    # or the degree-gated HiWi fast-track career_Adult_Historian_HiWi. Both share
+    # the same CareerLevels and affordance bands, so accept whichever one the Sim
+    # actually holds.
+    career = None
+    for uid in cls._hc_career_uids:
+        career = tracker.get_career_by_uid(uid)
+        if career is not None:
+            break
     if career is None:
         return TestResult(False, "Sim is not in the Historian career.")
 
-    if career.current_track_tuning is not cls._hc_required_track:
+    if career.current_track_tuning not in cls._hc_required_tracks:
         return TestResult(False, "Sim is on a different Historian track.")
 
     user_level = career.user_level
@@ -133,29 +142,44 @@ def _gated_test(cls, target, context, **kwargs):
     return TestResult.TRUE
 
 
-def install_level_gates(affordance_by_name, career_cls, required_track_cls, log=None):
+def install_level_gates(affordance_by_name, career_clses, required_track_clses, log=None):
     """Patch `_test` on each HC_Interaction_* tuning class.
 
-    affordance_by_name: dict[str, type] — the HC_Interaction_* tuning
+    affordance_by_name:   dict[str, type] — the HC_Interaction_* tuning
         classes keyed by tuning name. Caller (affordance_injector) already
         resolved these. Any name not in `_LEVEL_REQUIREMENTS` is left ungated.
-    career_cls:         the `career_Adult_Historian` tuning class.
-    required_track_cls: the `career_track_Adult_Historian` tuning class.
-    log:                optional callable for diagnostic lines; receives a
+    career_clses:         iterable of Career tuning classes whose Sims should be
+        gated — the regular `career_Adult_Historian` plus the degree-gated
+        fast-track `career_Adult_Historian_HiWi`. A Sim in ANY of them is gated
+        by the per-affordance band. (A single class is also accepted.)
+    required_track_clses: iterable of the matching CareerTrack tuning classes
+        (`career_track_Adult_Historian[_HiWi]`). The gate accepts a Sim whose
+        `current_track_tuning` is any of these. (A single class is also accepted.)
+    log:                  optional callable for diagnostic lines; receives a
         single string. Used by the injector's _log helper.
 
     Returns the number of classes patched. A class missing from
     `affordance_by_name` is skipped silently — the injector already logs
     affordance-resolution failures.
     """
-    career_uid = getattr(career_cls, "guid64", None)
-    if career_uid is None:
-        # Defensive: if guid64 isn't set yet, we'd patch all 5 classes to
-        # always fail. Better to do nothing and let the affordance stay
-        # ungated than to break it for every Sim including the L5 Prof.
+    # Tolerate a single class being passed instead of a list.
+    if not isinstance(career_clses, (list, tuple)):
+        career_clses = (career_clses,)
+    if not isinstance(required_track_clses, (list, tuple)):
+        required_track_clses = (required_track_clses,)
+
+    career_uids = tuple(
+        uid for uid in (getattr(c, "guid64", None) for c in career_clses)
+        if uid is not None
+    )
+    if not career_uids:
+        # Defensive: if no guid64 resolved, we'd patch every class to always
+        # fail. Better to leave the affordances ungated than to break them for
+        # every Sim including the L5 Prof.
         if log:
-            log("install_level_gates: career_cls has no guid64 — skipping.")
+            log("install_level_gates: no career guid64 resolved — skipping.")
         return 0
+    required_tracks = tuple(t for t in required_track_clses if t is not None)
 
     installed = 0
     for name, band in _LEVEL_REQUIREMENTS.items():
@@ -165,8 +189,8 @@ def install_level_gates(affordance_by_name, career_cls, required_track_cls, log=
         min_level, max_level = band
         cls._hc_min_user_level = min_level
         cls._hc_max_user_level = max_level
-        cls._hc_required_track = required_track_cls
-        cls._hc_career_uid = career_uid
+        cls._hc_required_tracks = required_tracks
+        cls._hc_career_uids = career_uids
         cls._test = classmethod(_gated_test)
         cls._hc_gate_installed = True
         installed += 1

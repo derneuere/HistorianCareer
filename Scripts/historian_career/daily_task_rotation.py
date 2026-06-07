@@ -47,9 +47,12 @@ import traceback
 
 MOD_NAME = "HistorianCareer"
 
-# The Historian career tuning name (the `n=` attribute). Must match the
-# career_Adult_Historian.xml resource so career_tracker lookups line up.
+# The Historian career tuning names (the `n=` attribute). Must match the
+# career_Adult_Historian*.xml resources so career_tracker lookups line up. Both
+# the regular entry and the degree-gated HiWi fast-track entry share the same
+# CareerLevels (and thus the same daily-task pools), so we rotate Sims in either.
 HC_CAREER_NAME = "career_Adult_Historian"
+HC_CAREER_NAMES = ("career_Adult_Historian", "career_Adult_Historian_HiWi")
 
 # Per-rank daily-task pool, mirrored from the AspirationCareer.objectives lists
 # in aspiration_career_Historian_L{n}.xml. This is the documented FALLBACK pool:
@@ -190,30 +193,37 @@ def _pick_for_day(pool, day_index, salt):
 # ---------------------------------------------------------------------------
 
 
-def _resolve_historian_career_uid():
-    """Resolve guid64 of career_Adult_Historian. Returns None if unavailable."""
+def _resolve_historian_career_uids():
+    """Resolve the guid64s of all Historian careers (regular + HiWi fast-track).
+
+    Returns a tuple of uids (possibly empty). Both careers may not be present on
+    every install, so missing ones are simply skipped."""
     if services is None or Types is None:
-        return None
+        return ()
     try:
         mgr = services.get_instance_manager(Types.CAREER)
         if mgr is None:
-            return None
-        cls = None
-        try:
-            cls = mgr.get(HC_CAREER_NAME)
-        except (ValueError, TypeError):
+            return ()
+        uids = []
+        for name in HC_CAREER_NAMES:
             cls = None
-        if cls is None:
-            for c in mgr.types.values():
-                if getattr(c, "__name__", None) == HC_CAREER_NAME:
-                    cls = c
-                    break
-        if cls is None:
-            return None
-        return getattr(cls, "guid64", None)
+            try:
+                cls = mgr.get(name)
+            except (ValueError, TypeError):
+                cls = None
+            if cls is None:
+                for c in mgr.types.values():
+                    if getattr(c, "__name__", None) == name:
+                        cls = c
+                        break
+            if cls is not None:
+                uid = getattr(cls, "guid64", None)
+                if uid is not None:
+                    uids.append(uid)
+        return tuple(uids)
     except Exception as e:
         _log("  career uid resolve failed: {}".format(e))
-        return None
+        return ()
 
 
 def _iter_sim_infos():
@@ -236,8 +246,8 @@ def rotate_daily_tasks():
     try:
         if services is None or Types is None:
             return
-        career_uid = _resolve_historian_career_uid()
-        if career_uid is None:
+        career_uids = _resolve_historian_career_uids()
+        if not career_uids:
             _log("  rotate: Historian career not resolvable; skipping (tuning pool still active).")
             return
         day_index = _current_sim_day()
@@ -247,7 +257,12 @@ def rotate_daily_tasks():
                 tracker = getattr(sim_info, "career_tracker", None)
                 if tracker is None:
                     continue
-                career = tracker.get_career_by_uid(career_uid)
+                # The Sim may be in either Historian entry (regular or HiWi).
+                career = None
+                for uid in career_uids:
+                    career = tracker.get_career_by_uid(uid)
+                    if career is not None:
+                        break
                 if career is None:
                     continue
                 user_level = getattr(career, "user_level", 0) or 0
