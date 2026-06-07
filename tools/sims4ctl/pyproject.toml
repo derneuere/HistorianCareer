@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sims4ctl"
+version = "0.1.0"
+description = "Game-generic CLI to drive & inspect a running The Sims 4 from outside (automated in-game testing)."
+readme = "README.md"
+requires-python = ">=3.8"
+# stdlib only — no runtime dependencies, by design (zero-dep wire protocol).
+dependencies = []
+
+[project.scripts]
+sims4ctl = "sims4ctl.cli:main"
+
+# The host package lives under host/; the in-game bridge is a separate
+# .ts4script artifact (not a pip package) and is intentionally excluded here.
+[tool.setuptools]
+package-dir = {"" = "host"}
+
+[tool.setuptools.packages.find]
+where = ["host"]
+include = ["sims4ctl*"]
