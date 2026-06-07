@@ -192,18 +192,23 @@ class DriverSnippetTest(unittest.TestCase):
     def test_every_mutation_and_probe_snippet_is_valid_python(self):
         # Each call assembles a snippet and sends it; the fake bridge compiles
         # it. A SyntaxError in any in-game body fails this test.
+        self.drv.capture_sim_id()
         self.drv.add_career()
         self.drv.remove_career()
         self.drv.promote_once()
+        self.drv.demote_once()
         self.drv.set_skill(spec.SKILL_IDS["writing"], 5)
         self.drv.set_skills({g: 10 for g in spec.SKILL_IDS.values()})
         self.drv.set_trait(spec.FAST_TRACK_TRAIT_ID, present=True)
         self.drv.set_trait(spec.REWARD_TRAIT_NAME, present=False)
         self.drv.has_trait(spec.REWARD_TRAIT_NAME)
+        self.drv.trait_exists(spec.FAST_TRACK_TRAIT_ID)
+        self.drv.skill_exists(spec.SKILL_IDS["research_debate"])
         self.drv.set_aspiration_track(spec.ASPIRATION_TRACK_NAME)
         self.drv.promotion_blocked()
         self.drv.affordance_gate_state()
         self.drv.daily_task_stash()
+        self.drv.run_daily_rotation()
         self.drv.wfh_enabled()
         # Sanity: every snippet carried the RESULT print + the params we expect.
         self.assertTrue(self.bridge.eval_codes)

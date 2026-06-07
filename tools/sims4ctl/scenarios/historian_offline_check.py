@@ -195,12 +195,16 @@ def _parse_block_promotion_gates(repo_root):
         cl_node = group.find(".//T[@n='career_level']")
         from_level = _level_from_career_level_name(
             cl_node.text if cl_node is not None else None)
-        skill_node = group.find(".//V[@t='skill']//T[@n='skill']")
-        max_node = group.find(".//V[@t='skill']//T[@n='max_value']")
-        if from_level is None or skill_node is None or max_node is None:
+        # EA skill test variant is `skill_test` with a `skill_range` interval
+        # whose `upper_bound` is the highest skill level that still BLOCKS the
+        # promotion (so required minimum == upper_bound + 1). The earlier
+        # `<V t="skill">` + `max_value` form did not resolve in-game (issue #32).
+        skill_node = group.find(".//V[@t='skill_test']//T[@n='skill']")
+        ub_node = group.find(".//V[@t='skill_test']//T[@n='upper_bound']")
+        if from_level is None or skill_node is None or ub_node is None:
             raise ValueError("malformed block_promotion_tests group")
         skill_key = guid_to_key.get(int(skill_node.text))
-        min_required = int(max_node.text) + 1  # block while <= max_value
+        min_required = int(ub_node.text) + 1  # block while skill <= upper_bound
         gates.setdefault(from_level, {})[skill_key] = min_required
     return gates
 

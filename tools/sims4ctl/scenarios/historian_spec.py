@@ -104,9 +104,11 @@ def gated_from_levels():
 
 
 def skill_max_value_for_block(min_required):
-    """The `max_value` an EA skill test must carry to block until `min_required`.
+    """The highest skill level that still BLOCKS, given a required minimum.
 
-    "block while skill <= min_required - 1" -> max_value = min_required - 1.
+    The EA skill_test's `skill_range` upper_bound is `min_required - 1` (it
+    passes -> blocks while skill <= upper_bound). This is also the value the live
+    scenario sets a skill to in order to sit just *below* the gate threshold.
     """
     return min_required - 1
 
