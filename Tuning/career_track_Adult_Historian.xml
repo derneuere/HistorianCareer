@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The single career track for the Historian career. Levels in order L1..L5.
+  The single career track for the Historian career. Levels in order L1..L10.
   No branch_selection block is included because there is no branching.
 
   Note: per EA's CareerTrack tuning (see Build/simdata/test/golden/CareerTrack/
@@ -18,6 +18,11 @@
     <T>career_level_Adult_Historian_L3</T>
     <T>career_level_Adult_Historian_L4</T>
     <T>career_level_Adult_Historian_L5</T>
+    <T>career_level_Adult_Historian_L6</T>
+    <T>career_level_Adult_Historian_L7</T>
+    <T>career_level_Adult_Historian_L8</T>
+    <T>career_level_Adult_Historian_L9</T>
+    <T>career_level_Adult_Historian_L10</T>
   </L>
   <!--
     Career UI icons. The build embeds matching PNG files from Build/icons/ as

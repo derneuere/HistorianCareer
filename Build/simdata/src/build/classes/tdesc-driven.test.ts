@@ -69,7 +69,7 @@ describe("TDESC-driven schemas — expected column sets per class", () => {
     ]);
   });
 
-  it("AspirationTrack: 9 EA-golden columns", async () => {
+  it("AspirationTrack: 11 EA-golden columns (patched 1.124.55 schema, issue #24)", async () => {
     const sd = await buildOne("aspiration_track_HistorianCalling.xml");
     const cols = sd.schemas[0]!.columns.map((c) => c.name).sort();
     expect(cols).toEqual([
@@ -79,7 +79,9 @@ describe("TDESC-driven schemas — expected column sets per class", () => {
       "display_text",
       "icon",
       "icon_high_res",
+      "is_hidden_unlockable",
       "mood_asm_param",
+      "override_traits",
       "primary_trait",
       "reward",
     ]);

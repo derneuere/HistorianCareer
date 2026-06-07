@@ -186,15 +186,17 @@ function parseTunableType(node: unknown, attrs: ReadonlyAttrs): TdescType {
 
     case "TunableMapping": {
       // A dict mapping key→value. EA's SimData layer treats these as a vector
-      // of tuples; we approximate with vector<object>. Empirically, EA names
-      // the mapping element schema using the slot name (e.g. "aspirations" —
-      // the same name as the parent column), NOT the TDESC's
-      // `mapping_class` attribute. We default to the slot name.
+      // of tuples; we approximate with vector<object>. The 1.124.55 patch
+      // names the mapping element schema using the TDESC's `mapping_class`
+      // attribute (e.g. "AspirationsMappingTuple"), NOT the slot name. The
+      // pre-patch base game used the slot name ("aspirations"); matching the
+      // patched runtime is required so the AS3 client resolves the inner
+      // schema (hash 0xd012f9dc) — see ASPIRATION_TRACK_EA_COLUMNS / issue #24.
       const keyType = parseMappingChild(node, attrs, "mapping_key");
       const valueType = parseMappingChild(node, attrs, "mapping_value");
       const schemaName =
-        readString(attrs, "name") ??
         readString(attrs, "mapping_class") ??
+        readString(attrs, "name") ??
         "Mapping";
       return {
         kind: "vector",

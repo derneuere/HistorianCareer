@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Aspiration track "Historian's Calling" — 4 tiers (T1..T4); completing T4
+  grants trait_HabilitationRenown. Un-retired: issue #24 is FIXED. The
+  SimData generator now emits the patched 11-col adult AspirationTrack schema
+  (0x1544019c) that the running game loads, so this no longer crashes the
+  Olympus AS3 client at launch. IDs are pinned to EA's 16-bit range (track
+  0x9ECB / tiers 0x9ECC..0x9ECF).
+-->
+
+<I c="AspirationTrack" i="aspiration_track" m="aspirations.aspiration_tuning" n="aspiration_track_HistorianCalling" s="40651">
+  <L n="aspirations">
+    <U>
+      <E n="key">LEVEL_1</E>
+      <T n="value">aspiration_HistorianCalling_T1</T>
+    </U>
+    <U>
+      <E n="key">LEVEL_2</E>
+      <T n="value">aspiration_HistorianCalling_T2</T>
+    </U>
+    <U>
+      <E n="key">LEVEL_3</E>
+      <T n="value">aspiration_HistorianCalling_T3</T>
+    </U>
+    <U>
+      <E n="key">LEVEL_4</E>
+      <T n="value">aspiration_HistorianCalling_T4</T>
+    </U>
+  </L>
+  <!-- Asp_Cat_Knowledge — extracted from live game CombinedTuning. -->
+  <T n="category">25385</T>
+  <T n="description_text">0xTBD_STBL_KEY_HC_ASPTRACK_DESC</T>
+  <T n="display_text">0xTBD_STBL_KEY_HC_ASPTRACK_NAME</T>
+  <!--
+    Custom icon. The build embeds Build/icons/Aspiration_HistorianCalling.png
+    as a 0x2F7D0004 resource; the bare filename below is rewritten to the full
+    TGI at emit time by build-package.mjs step 4.
+  -->
+  <T n="icon" p="HistorianCareer\Aspiration_HistorianCalling.png">Aspiration_HistorianCalling.png</T>
+  <U n="notification">
+    <V n="text" t="single">
+      <T n="single">0xTBD_STBL_KEY_HC_ASPTRACK_COMPLETE_BODY</T>
+    </V>
+    <V n="title" t="enabled">
+      <T n="enabled">0xTBD_STBL_KEY_HC_ASPTRACK_COMPLETE_TITLE</T>
+    </V>
+    <L n="ui_responses">
+      <U>
+        <!-- Reuse EA's "Choose New Aspiration" response text (0x7E8E7CD3). -->
+        <T n="text">0x7E8E7CD3</T>
+        <E n="ui_request">SHOW_ASPIRATION_SELECTOR</E>
+      </U>
+    </L>
+    <E n="urgency">DEFAULT</E>
+  </U>
+  <!--
+    primary_trait is the CAS personality trait associated with this aspiration
+    track — shown in the Sim's trait panel while the track is active. For adult
+    Knowledge-category tracks this appears to be REQUIRED for CAS visibility
+    (Track_Knowledge_A/Renaissance Sim sets it to 27086; child track
+    Track_Motor doesn't, but child-aspiration registration goes through a
+    different code path). 27086 is the EA-shipped Knowledge category primary
+    trait — borrowing it as a stand-in until we author a Historian-specific
+    CAS trait.
+  -->
+  <T n="primary_trait">27086</T>
+
+  <!--
+    Reward trait granted while this track is the Sim's primary aspiration. -->
+  <L n="provided_traits">
+    <T>trait_HabilitationRenown</T>
+  </L>
+  <!--
+    Reward chain awarded on completing the FINAL aspiration tier in this track.
+    Reward_Knowledge_Chronicler (27489) is EA's "Renaissance Sim" reward —
+    it grants a renaissance-themed trait/perk set. Adequate stand-in until we
+    author our own AspirationReward snippet that grants e.g. a research-bonus
+    perk. TODO: replace with HC-authored AspirationReward.
+  -->
+  <T n="reward">27489</T>
+</I>

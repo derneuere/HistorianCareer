@@ -2,7 +2,7 @@
 #
 # Mirrors the structure of the upstream reference (UXMod-Sims4, MIT, Rea Havari):
 # notification on level-up, fired from a tracker that watches the custom statistic.
-# Five tiers, modelled on the German academic Karriereleiter.
+# Ten tiers, modelled on the German academic Karriereleiter (see Docs/DESIGN.md).
 
 try:
     import sims4
@@ -14,13 +14,19 @@ except Exception:
 
 MOD_NAME = "HistorianCareer"
 
-# Maps statistic value -> (English title, German title)
+# Maps career user_level (1-indexed) -> (English title, German title).
+# Titles are LAW per _BUILD_SPEC.md THE 10-RANK TABLE.
 TIERS = {
-    1: ("Research Assistant",        "Wissenschaftliche Hilfskraft"),
-    2: ("PhD Candidate",             "Doktorand:in"),
-    3: ("Postdoctoral Researcher",   "Postdoktorand:in"),
-    4: ("Junior Professor",          "Juniorprofessor:in"),
-    5: ("Full Professor (W3)",       "Professor:in (W3)"),
+    1:  ("Hobby Historian",                  "Hobbyhistoriker:in"),
+    2:  ("Museum Attendant",                 "Museumswaerter:in"),
+    3:  ("Intern",                           "Praktikant:in"),
+    4:  ("Trainee",                          "Volontariat"),
+    5:  ("Research Assistant (HiWi)",        "Wissenschaftliche Hilfskraft"),
+    6:  ("PhD Candidate",                    "Doktorand:in"),
+    7:  ("Postdoctoral Researcher",          "Postdoktorand:in"),
+    8:  ("Junior Professor",                 "Juniorprofessor:in"),
+    9:  ("Full Professor",                   "Professor:in (W3)"),
+    10: ("Institute Director",               "Direktor:in"),
 }
 
 

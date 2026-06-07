@@ -134,9 +134,17 @@ export const ASPIRATION_CAREER_SCHEMA: TdescSchema = (() => {
 })();
 
 // ---------------------------------------------------------------------------
-// AspirationTrack. EA golden has 9 columns. TDESC marks 11 with full
-// export_modes (adds `is_hidden_unlockable` and `override_traits` which the
-// golden doesn't have — newer-game additions).
+// AspirationTrack. The 1.124.55 PATCH (base/Preload + DeltaBuild0) overrides
+// the original 9-column base-game schema with an 11-column one (schema hash
+// 0x1544019c, inner mapping 0xd012f9dc), adding `is_hidden_unlockable` and
+// `override_traits`. The running game loads the patched override, so an
+// adult AspirationTrack MUST emit the 11-column layout — shipping the 9-column
+// (pre-patch FullBuild0) schema is what crashed the Olympus AS3 client at
+// launch (`AspirationTrackStaticData.INIT_DATA() -> aspirations null`, the
+// retired-track bug / issue #24). Verified by extracting Track_Knowledge_A's
+// SimData from base/Preload (823 bytes, 11 cols). Columns are alphabetical
+// (SimData convention): is_hidden_unlockable sorts between icon_high_res and
+// mood_asm_param; override_traits between mood_asm_param and primary_trait.
 // ---------------------------------------------------------------------------
 const ASPIRATION_TRACK_EA_COLUMNS = [
   "aspirations",
@@ -145,7 +153,9 @@ const ASPIRATION_TRACK_EA_COLUMNS = [
   "display_text",
   "icon",
   "icon_high_res",
+  "is_hidden_unlockable",
   "mood_asm_param",
+  "override_traits",
   "primary_trait",
   "reward",
 ] as const;
@@ -463,7 +473,7 @@ export const KNOWN_SCHEMA_HASHES: Readonly<Record<string, number>> = Object.free
   CareerLevel: 0x82d9b9a3,
   Aspiration: 0x72abca6f,
   AspirationCareer: 0x4e53725b,
-  AspirationTrack: 0x54fdb5fc,
+  AspirationTrack: 0x1544019c,
   Objective: 0xd5cfeba5,
   // PieMenuCategory + nested schemas. The Olympus UI uses these exact hashes
   // to identify the row at boot — without 0x022065c1 the row is silently
@@ -480,8 +490,10 @@ export const KNOWN_SCHEMA_HASHES: Readonly<Record<string, number>> = Object.free
   // "Error: ProgressBar: Maximum cannot be equal to minimum".
   Statistic: 0x8273c673,
   // Nested schema for AspirationTrack.aspirations (mapping key→value tuple).
-  // EA extracts this from the live game; we can't derive it from a name hash.
-  aspirations: 0xfb8c84bc,
+  // The 1.124.55 patch names this "AspirationsMappingTuple" (mapping_class)
+  // with hash 0xd012f9dc — the pre-patch base game used name "aspirations"
+  // /0xfb8c84bc. We target the patched runtime (see issue #24 fix).
+  AspirationsMappingTuple: 0xd012f9dc,
   // CareerLevel.work_schedule nested schemas. EA's schema hashes for these
   // appear to be derived from the schema's binary layout (column names+types
   // hashed together) rather than just FNV32(name) — empirically the simple

@@ -62,7 +62,12 @@ const SIMDATA_TYPE = 0x545AC67A;
 const ASPIRATION_TRACK_GROUP = 0x0020FC6D;
 const ASPIRATION_GROUP = 0x00B6465D;
 
-const ASPIRATION_TRACK_SCHEMA_HASH = 0x54fdb5fc;
+// Accept BOTH the pre-patch (9-col, base FullBuild0) and the 1.124.55-patched
+// (11-col, base Preload) adult AspirationTrack schema hashes — the generator
+// now emits the patched 0x1544019c (see issue #24 fix), but keep the old hash
+// so a regression to either layout is still validated rather than skipped.
+const ASPIRATION_TRACK_SCHEMA_HASH = 0x1544019c; // current (patched) adult-track hash
+const ASPIRATION_TRACK_SCHEMA_HASHES = new Set([0x54fdb5fc, ASPIRATION_TRACK_SCHEMA_HASH]);
 const ASPIRATION_SCHEMA_HASH = 0x72abca6f;
 
 // Columns EA's shipping AspirationTrack SimDatas always populate non-null
@@ -276,7 +281,7 @@ export function assertSimDataPopulated(pkg) {
       const schemaHash = inst.schema.hash;
 
       // AspirationTrack rows
-      if (k.group === ASPIRATION_TRACK_GROUP && schemaHash === ASPIRATION_TRACK_SCHEMA_HASH) {
+      if (k.group === ASPIRATION_TRACK_GROUP && ASPIRATION_TRACK_SCHEMA_HASHES.has(schemaHash)) {
         tracksChecked++;
         const violations = checkInstance(inst, REQUIRED_NONZERO_TRACK_COLUMNS);
         // Also walk aspirations inner vector

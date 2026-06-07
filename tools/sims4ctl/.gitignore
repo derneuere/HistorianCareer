@@ -1,0 +1,13 @@
+# Build artifacts
+build/out/
+build/.pyc-build/
+
+# Python
+__pycache__/
+*.pyc
+
+# Test / tooling
+.pytest_cache/
+
+# Scratch
+*.tmp

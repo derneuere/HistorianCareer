@@ -106,6 +106,11 @@ try:
 except BaseException as _hc_e:
     _hc_log_import_error("historian_career", _hc_e)
 
+try:
+    from . import daily_task_rotation  # noqa: F401
+except BaseException as _hc_e:
+    _hc_log_import_error("daily_task_rotation", _hc_e)
+
 # NOTE: aspiration_diag.py is NOT auto-imported.
 #
 # It was originally wired in here to gather diagnostic info on issue #17,

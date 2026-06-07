@@ -1,21 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  L5: Professor:in (W3) — Lehrstuhl. Top pay, prestige hours.
+  L5: Wissenschaftliche Hilfskraft (Research Assistant / HiWi). First real
+  academic rank; Discover University degree holders fast-track in here.
+  Full 6h academic day.
 
   Field names per EA CareerLevel TDESC; see career_level_Adult_Historian_L1.xml.
-
-  Skill gate (Research+Debate AND Writing both at 10, mimicking Habilitation) is
-  not a CareerLevel field in EA tuning — see career_level_Adult_Historian_L3.xml.
-  The Habilitation Renown trait is awarded via the aspiration track's
-  `provided_traits`; per-level trait awards on promotion can be wired through
-  `promotion_reward` (a TunableReference) once the reward snippet exists.
+  Incoming promotion (L4->L5) is performance-only per DESIGN.
 -->
 <I c="CareerLevel" i="career_level" m="careers.career_tuning" n="career_level_Adult_Historian_L5" s="TBD_INSTANCE_ID">
   <T n="title">0xTBD_STBL_KEY_HC_LEVEL_5_TITLE</T>
   <T n="title_description">0xTBD_STBL_KEY_HC_LEVEL_5_DESC</T>
-  <T n="simoleons_per_hour">340</T>
+  <V n="pay_type" t="simoleons_per_hour">
+    <T n="simoleons_per_hour">40</T>
+  </V>
 
-  <!-- See L1 for rationale on ideal_mood; matches EA's Writer career convention. -->
   <T n="ideal_mood">14641</T>
 
   <T n="performance_stat">HC_PerformanceStat_Historian</T>
@@ -29,26 +27,22 @@
     <L n="tested_metrics"/>
   </U>
 
-  <!--
-    Prestige Lehrstuhl hours: Tue-Fri 10:00-18:00 (duration=8h). Professors
-    typically don't keep teaching hours on Monday in the German university
-    calendar — research/admin day. Saturday and Sunday off.
-  -->
+  <!-- HiWi hours: Mon-Fri 09:00-15:00 (duration=6h). -->
   <U n="work_schedule">
     <L n="schedule_entries">
       <U>
         <U n="days_available">
           <T n="0 SUNDAY">False</T>
-          <T n="1 MONDAY">False</T>
+          <T n="1 MONDAY">True</T>
           <T n="2 TUESDAY">True</T>
           <T n="3 WEDNESDAY">True</T>
           <T n="4 THURSDAY">True</T>
           <T n="5 FRIDAY">True</T>
           <T n="6 SATURDAY">False</T>
         </U>
-        <T n="duration">8</T>
+        <T n="duration">6</T>
         <U n="start_time">
-          <T n="hour">10</T>
+          <T n="hour">9</T>
           <T n="minute">0</T>
         </U>
       </U>
@@ -56,7 +50,7 @@
   </U>
 
   <U n="wakeup_time">
-    <T n="hour">9</T>
+    <T n="hour">8</T>
     <T n="minute">0</T>
   </U>
 
