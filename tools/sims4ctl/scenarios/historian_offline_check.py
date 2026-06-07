@@ -12,7 +12,7 @@ fails loudly.
 What it cross-checks (each against `historian_spec.py`, the single source of truth):
 
   1. Pay schedule   -- Tuning/career_level_Adult_Historian_L{1..10}.xml
-  2. Fast-track     -- Tuning/career_Adult_Historian.xml start_level_modifiers
+  2. Fast-track     -- Tuning/career_Adult_Historian_HiWi.xml (separate entry)
   3. Skill gates    -- Tuning/career_Adult_Historian.xml block_promotion_tests
                        (all 5 gated transitions + the 4 ungated ones)
   4. Affordances    -- Scripts/historian_career/level_gate.py _LEVEL_REQUIREMENTS
@@ -164,22 +164,51 @@ def check_pay_schedule(h, repo_root):
 
 
 def check_fast_track(h, repo_root):
-    print("\n-- DU fast-track: start_level_modifiers (+4 on trait 230331) --")
-    root = _parse_xml(os.path.join(_tuning_dir(repo_root), "career_Adult_Historian.xml"))
-    slm = root.find(".//U[@n='start_level_modifiers']")
+    print("\n-- DU fast-track: separate degree-gated HiWi entry (+4 -> L5) --")
+    tdir = _tuning_dir(repo_root)
+
+    # 1. The regular career must NO LONGER carry an in-place start_level_modifiers
+    #    block — degree holders are not auto-bumped on the main entry anymore, so
+    #    they get a real choice (grind from L1, or take the HiWi entry to L5).
+    main = _parse_xml(os.path.join(tdir, "career_Adult_Historian.xml"))
+    h.check(main.find(".//U[@n='start_level_modifiers']") is None,
+            "regular career has no start_level_modifiers (always starts at L1)")
+
+    # 2. The HiWi fast-track is a SEPARATE Career resource with an UNCONDITIONAL
+    #    +4 start_level_modifiers (the degree-gating lives in availability tests,
+    #    not inside the modifier).
+    hiwi_path = os.path.join(tdir, "career_Adult_Historian_HiWi.xml")
+    if not os.path.isfile(hiwi_path):
+        h.check(False, "HiWi career file present", "missing career_Adult_Historian_HiWi.xml")
+        return
+    hiwi = _parse_xml(hiwi_path)
+    slm = hiwi.find(".//U[@n='start_level_modifiers']")
     if slm is None:
-        h.check(False, "start_level_modifiers present", "missing block")
+        h.check(False, "HiWi start_level_modifiers present", "missing block")
         return
     mod_node = slm.find(".//L[@n='modifiers']/U/T[@n='modifier']")
     got_mod = int(mod_node.text) if mod_node is not None and mod_node.text else None
-    h.eq(got_mod, spec.FAST_TRACK_MODIFIER, "fast-track modifier == +4")
+    h.eq(got_mod, spec.FAST_TRACK_MODIFIER, "HiWi fast-track modifier == +4")
+    h.check(slm.find(".//L[@n='modifiers']/U/L[@n='tests']/L") is None,
+            "HiWi modifier is unconditional (degree-gating is in availability)")
+    h.eq(spec.BASE_START_LEVEL + (got_mod or 0), spec.FAST_TRACK_START_LEVEL,
+         "degree holder starts at L5 via the HiWi entry")
 
-    trait_node = slm.find(".//L[@n='whitelist_traits']/T")
+    # 3. The HiWi entry is degree-gated via career_availablity_tests (so it only
+    #    appears in the find-a-job picker for History-degree holders).
+    avail = hiwi.find(".//L[@n='career_availablity_tests']")
+    trait_node = avail.find(".//L[@n='whitelist_traits']/T") if avail is not None else None
     got_trait = int(trait_node.text) if trait_node is not None and trait_node.text else None
     h.eq(got_trait, spec.FAST_TRACK_TRAIT_ID,
-         "fast-track gated on History-degree trait 230331")
-    h.eq(spec.BASE_START_LEVEL + (got_mod or 0), spec.FAST_TRACK_START_LEVEL,
-         "degree holder starts at L5")
+         "HiWi entry gated on History-degree trait 230331")
+
+    # 4. The HiWi career points at its own track (its own find-a-job label), and
+    #    that track file exists.
+    st = hiwi.find(".//T[@n='start_track']")
+    h.eq(st.text if st is not None else None, spec.HIWI_TRACK_NAME,
+         "HiWi career start_track -> HiWi track")
+    h.check(os.path.isfile(os.path.join(tdir, "career_track_Adult_Historian_HiWi.xml")),
+            "HiWi track file present")
 
 
 def _parse_block_promotion_gates(repo_root):

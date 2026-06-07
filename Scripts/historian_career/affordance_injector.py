@@ -505,18 +505,28 @@ def _inject_once():
             track_mgr = services.get_instance_manager(Types.CAREER_TRACK) if services and Types else None
             career_cls = _find_tuning_by_name(career_mgr, "career_Adult_Historian")
             track_cls = _find_tuning_by_name(track_mgr, "career_track_Adult_Historian")
-            if career_cls is None or track_cls is None:
+            # Degree-gated HiWi fast-track entry (separate Career + CareerTrack).
+            # May be absent on older installs; resolved best-effort and only added
+            # to the gate when present.
+            hiwi_career_cls = _find_tuning_by_name(career_mgr, "career_Adult_Historian_HiWi")
+            hiwi_track_cls = _find_tuning_by_name(track_mgr, "career_track_Adult_Historian_HiWi")
+            career_clses = [c for c in (career_cls, hiwi_career_cls) if c is not None]
+            track_clses = [t for t in (track_cls, hiwi_track_cls) if t is not None]
+            if not career_clses or not track_clses:
                 _log(
-                    "  Level gates SKIPPED: "
-                    f"career_cls={career_cls!r} track_cls={track_cls!r} "
+                    "  Level gates SKIPPED: career/track not resolvable "
+                    f"(career_cls={career_cls!r} track_cls={track_cls!r} "
+                    f"hiwi_career={hiwi_career_cls!r} hiwi_track={hiwi_track_cls!r}) "
                     "— affordances remain ungated for this session."
                 )
             else:
                 # affordance_by_name is keyed by tuning name; install_level_gates
                 # pulls exactly the names present in _LEVEL_REQUIREMENTS and
-                # leaves any others ungated.
-                n = install_level_gates(affordance_by_name, career_cls, track_cls, log=_log)
-                _log(f"  Level gates installed on {n} HC_Interaction_* classes.")
+                # leaves any others ungated. Both Historian entries (regular +
+                # HiWi) are passed so a Sim in either is gated identically.
+                n = install_level_gates(affordance_by_name, career_clses, track_clses, log=_log)
+                _log(f"  Level gates installed on {n} HC_Interaction_* classes "
+                     f"(careers={len(career_clses)} tracks={len(track_clses)}).")
         except Exception as e:
             _log(f"  Level-gate install error: {e}\n{traceback.format_exc()}")
 

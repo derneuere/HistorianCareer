@@ -308,6 +308,45 @@ RESULT = {"level": _user_level(SI), "present": _hist_career(SI) is not None}
 '''
         return self._run(body)
 
+    def add_hiwi_career(self):
+        """Force-join the degree-gated HiWi fast-track career (separate entry).
+        Returns its starting user_level so callers can assert the +4 (-> L5).
+        Bypasses availability tests like add_career, so callers should equip the
+        degree trait first to avoid the periodic availability check evicting the
+        Sim."""
+        body = '''
+cls = _by_name(_mgr(Types.CAREER), "career_Adult_Historian_HiWi")
+level = None
+present = False
+if cls is not None and SI is not None:
+    try:
+        if SI.career_tracker.get_career_by_uid(cls.guid64) is None:
+            SI.career_tracker.add_career(cls(SI))
+        c = SI.career_tracker.get_career_by_uid(cls.guid64)
+        present = c is not None
+        if c is not None:
+            level = int(c.user_level)
+    except Exception:
+        pass
+RESULT = {"level": level, "present": present}
+'''
+        return self._run(body)
+
+    def remove_hiwi_career(self):
+        body = '''
+cls = _by_name(_mgr(Types.CAREER), "career_Adult_Historian_HiWi")
+present = False
+if cls is not None and SI is not None:
+    try:
+        if SI.career_tracker.get_career_by_uid(cls.guid64) is not None:
+            SI.career_tracker.remove_career(cls.guid64)
+        present = SI.career_tracker.get_career_by_uid(cls.guid64) is not None
+    except Exception:
+        pass
+RESULT = {"present": present}
+'''
+        return self._run(body)
+
     def remove_career(self):
         body = '''
 cls = _career_cls()
@@ -671,31 +710,37 @@ def step_add_and_pay(h, drv):
 
 
 def step_fast_track(h, drv):
-    print("\n== DU fast-track: History-degree trait -> join at L5 ==")
-    # The fast-track keys off the hidden Discover University degree trait
-    # (230331). If the DU pack isn't installed that trait never loads, so the
-    # fast-track simply cannot occur and there is nothing to verify in-game --
-    # report it as a skip (the +4 modifier authoring is verified offline).
+    print("\n== DU fast-track: degree -> separate HiWi entry starts at L5 ==")
+    # The fast-track is now a SEPARATE degree-gated career entry
+    # (career_Adult_Historian_HiWi) rather than an in-place +4 on the regular
+    # career. It keys off the hidden Discover University degree trait (230331);
+    # if the DU pack isn't installed that trait never loads, so the entry is
+    # hidden and there is nothing to verify in-game -- report it as a skip (the
+    # HiWi career's unconditional +4 is verified offline).
     if not drv.trait_exists(spec.FAST_TRACK_TRAIT_ID):
         h.check(True, "fast-track SKIPPED: degree trait {0} not loaded "
-                "(Discover University not installed; +4 modifier verified offline)"
+                "(Discover University not installed; HiWi +4 verified offline)"
                 .format(spec.FAST_TRACK_TRAIT_ID))
         return
 
     drv.remove_career()
+    drv.remove_hiwi_career()
     time.sleep(0.2)
     h.check(drv.historian_entry() is None, "career removed before fast-track test")
 
+    # Equip the degree trait first so the HiWi entry's availability test passes
+    # and the periodic check doesn't evict the Sim after we force-join.
     got = drv.set_trait(spec.FAST_TRACK_TRAIT_ID, present=True)
     h.check(got.get("has") is True,
             "History-degree trait {0} equipped".format(spec.FAST_TRACK_TRAIT_ID),
             "has={0}".format(got.get("has")))
-    drv.add_career()
+    r = drv.add_hiwi_career()
     time.sleep(0.3)
-    level, _pay = drv.historian_level_pay()
-    h.eq(level, spec.FAST_TRACK_START_LEVEL,
-         "degree holder fast-tracks to L{0}".format(spec.FAST_TRACK_START_LEVEL))
+    h.check(r.get("present") is True, "HiWi fast-track career joined")
+    h.eq(_as_int(r.get("level")), spec.FAST_TRACK_START_LEVEL,
+         "HiWi entry starts at L{0}".format(spec.FAST_TRACK_START_LEVEL))
     # Clean up so later steps start from a known place.
+    drv.remove_hiwi_career()
     drv.set_trait(spec.FAST_TRACK_TRAIT_ID, present=False)
 
 
