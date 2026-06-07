@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Continuation-only read SuperInteraction for HC_Interaction_CrossReference's
+  bookshelf picker. NOT shown in any pie menu (allow_user_directed /
+  allow_autonomous False) and reached only via the picker's continuation on the
+  picked book. Modelled on EA's book_read_browse (s=76988): pulls the chosen
+  book from the bookshelf inventory (allow_from_object_inventory), plays the
+  genuine read animation (canonical 11313 + Book_Read_Active/Passive mixers
+  13120/13121) and carry transfer (11315/77036), sits to read via the seating
+  posture preferences, runs 45-90 sim minutes (time_based EXIT_NATURALLY) and
+  then fires the historian level loot. All numeric refs are base-game.
+-->
+<I c="SuperInteraction" i="interaction" m="interactions.base.super_interaction" n="HC_Interaction_CrossReferenceRead" s="TBD_INSTANCE_ID">
+  <V n="_carry_transfer_animation" t="enabled">
+    <U n="enabled">
+      <U n="begin">
+        <T n="factory">11315</T><!-- Book_Read_Start_Set -->
+      </U>
+      <U n="end">
+        <T n="factory">77036</T>
+      </U>
+    </U>
+  </V>
+  <V n="_icon" t="participant">
+    <U n="participant">
+      <L n="participant_type">
+        <E>Object</E>
+      </L>
+    </U>
+  </V>
+  <V n="_saveable" t="enabled"/>
+  <T n="allow_autonomous">False</T>
+  <T n="allow_from_object_inventory">True</T>
+  <T n="allow_from_sim_inventory">False</T>
+  <T n="allow_from_world">False</T>
+  <T n="allow_user_directed">False</T>
+  <T n="attention_cost">1</T>
+  <V n="basic_content" t="flexible_length">
+    <U n="flexible_length">
+      <L n="conditional_actions">
+        <V t="list_reference">
+          <T n="list_reference">40705</T><!-- ExitConditionList_MotivesNearFail -->
+        </V>
+        <V t="literal">
+          <U n="literal">
+            <L n="conditions">
+              <V t="time_based">
+                <U n="time_based">
+                  <T n="max_time">90</T>
+                  <T n="min_time">45</T>
+                </U>
+              </V>
+            </L>
+            <E n="interaction_action">EXIT_NATURALLY</E>
+          </U>
+        </V>
+      </L>
+      <V n="content" t="staging_content">
+        <U n="staging_content">
+          <U n="content_set">
+            <L n="affordance_links">
+              <T>13120</T><!-- Book_Read_Active -->
+              <T>13121</T><!-- Book_Read_Passive -->
+            </L>
+          </U>
+        </U>
+      </V>
+      <T n="start_autonomous_inertial">False</T>
+    </U>
+  </V>
+  <V n="basic_focus" t="do_not_change_focus"/>
+  <V n="canonical_animation" t="enabled">
+    <U n="enabled">
+      <T n="factory">11313</T><!-- Book_Read_Active_Set -->
+    </U>
+  </V>
+  <T n="display_name">0xTBD_STBL_KEY_HC_INTERACTION_CROSSREF</T>
+  <E n="duplicate_affordance_group">DuplicateAffordance_Read</E>
+  <L n="interaction_category_tags">
+    <T>Interaction_Super</T>
+    <T>Interaction_All</T>
+  </L>
+  <V n="outcome" t="single">
+    <U n="single">
+      <U n="actions">
+        <L n="loot_list">
+          <T>HC_Loot_Add_HistorianLevel_Small</T>
+        </L>
+      </U>
+    </U>
+  </V>
+  <U n="posture_preferences">
+    <T n="apply_penalties">False</T>
+    <T n="find_best_posture">False</T>
+    <L n="posture_cost_overrides">
+      <U>
+        <T n="key">15527</T>
+        <T n="value">40</T>
+      </U>
+    </L>
+    <T n="prefer_surface">False</T>
+  </U>
+  <V n="posture_target_preference" t="enabled">
+    <L n="enabled">
+      <U>
+        <E n="key">SEATING_BARSTOOL</E>
+        <T n="value">5</T>
+      </U>
+      <U>
+        <E n="key">SEATING_BED</E>
+        <T n="value">5</T>
+      </U>
+      <U>
+        <E n="key">SEATING_DINING</E>
+        <T n="value">5</T>
+      </U>
+      <U>
+        <E n="key">SEATING_LIVING</E>
+        <T n="value">15</T>
+      </U>
+      <U>
+        <E n="key">SEATING_LOVESEAT</E>
+        <T n="value">15</T>
+      </U>
+      <U>
+        <E n="key">SEATING_SOFA</E>
+        <T n="value">15</T>
+      </U>
+    </L>
+  </V>
+  <E n="target_type">OBJECT</E>
+  <T n="time_overhead">30</T>
+</I>
