@@ -243,6 +243,23 @@ def _resolve_sim_object_classes(obj_mgr):
                         break
         except Exception as e:
             _log(f"  sim object: fuzzy scan failed: {e}")
+    # 4. canonical: the "sim" OBJECT tuning by instance id (14965). This is the
+    #    object-tuning class whose _super_affordances the pie-menu builder reads
+    #    for a clicked Sim. String-keyed obj_mgr.get('sim') can't resolve it
+    #    (DefinitionManager is integer-keyed), so resolve by ResourceKey the way
+    #    Lot51 / XML Injector do.
+    if obj_mgr is not None:
+        try:
+            from sims4.resources import get_resource_key
+            sim_key = get_resource_key(14965, Types.OBJECT)
+            sim_obj = obj_mgr.types.get(sim_key)
+            if sim_obj is not None:
+                targets.add(sim_obj)
+                _log("  sim object: FOUND via OBJECT instance id 14965")
+            else:
+                _log("  sim object: id 14965 not present in OBJECT manager")
+        except Exception as e:
+            _log("  sim object: id-14965 resolve failed: {}".format(e))
     return targets
 
 

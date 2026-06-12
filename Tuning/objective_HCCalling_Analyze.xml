@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Field names per EA Objective TDESC; see objective_HC_ReadNonfictionBook.xml for notes.
+  Historian's Calling (CAS aspiration) tier objective: a distinct instance from
+  the career daily task so the two never share one Objective GUID.
 -->
-<I c="Objective" i="objective" m="event_testing.objective_tuning" n="objective_HC_RunAnalyzePrimarySource" s="TBD_INSTANCE_ID">
+<I c="Objective" i="objective" m="event_testing.objective_tuning" n="objective_HCCalling_Analyze" s="TBD_INSTANCE_ID">
   <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_ANALYZE</T>
   <T n="tooltip">0xTBD_STBL_KEY_HC_OBJ_ANALYZE_TT</T>
   <V n="objective_completion_type" t="iterations">

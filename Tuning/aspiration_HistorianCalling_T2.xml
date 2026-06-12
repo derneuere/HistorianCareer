@@ -7,7 +7,7 @@
   <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T2_DESC</T>
   <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
   <L n="objectives">
-    <T>objective_HC_RunAnalyzePrimarySource</T>
-    <T>objective_HC_RunPresentAtSymposium</T>
+    <T>objective_HCCalling_Analyze</T>
+    <T>objective_HCCalling_Symposium</T>
   </L>
 </I>

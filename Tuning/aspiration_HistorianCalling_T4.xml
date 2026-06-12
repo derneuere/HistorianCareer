@@ -7,7 +7,7 @@
   <T n="descriptive_text">0xTBD_STBL_KEY_HC_ASP_T4_DESC</T>
   <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
   <L n="objectives">
-    <T>objective_HC_RunSuperviseDissertation</T>
+    <T>objective_HCCalling_Supervise</T>
   </L>
   <!-- Reward applied on tier completion. Canonical EA field is `on_complete_loot_actions`. -->
   <L n="on_complete_loot_actions">

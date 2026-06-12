@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Career daily-task objective: run "Transcribe Manuscript" once (single action
+  per the one-task-per-day design). Distinct instance from the Historian's
+  Calling tier objective (objective_HCCalling_Transcribe_x2) so the two
+  milestones never share one Objective GUID. Field names per EA Objective
+  TDESC; see objective_HC_ReadNonfictionBook.xml.
+-->
+<I c="Objective" i="objective" m="event_testing.objective_tuning" n="objective_HC_RunTranscribeManuscript" s="TBD_INSTANCE_ID">
+  <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_TRANSCRIBE</T>
+  <T n="tooltip">0xTBD_STBL_KEY_HC_OBJ_TRANSCRIBE_TT</T>
+  <V n="objective_completion_type" t="iterations">
+    <U n="iterations">
+      <T n="iterations_required_to_pass">1</T>
+    </U>
+  </V>
+  <V n="objective_test" t="ran_interaction_test">
+    <U n="ran_interaction_test">
+      <L n="affordances">
+        <T>HC_Interaction_TranscribeManuscript</T>
+      </L>
+    </U>
+  </V>
+</I>

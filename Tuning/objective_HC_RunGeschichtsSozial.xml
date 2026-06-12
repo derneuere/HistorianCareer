@@ -7,6 +7,7 @@
 -->
 <I c="Objective" i="objective" m="event_testing.objective_tuning" n="objective_HC_RunGeschichtsSozial" s="TBD_INSTANCE_ID">
   <T n="display_text">0xTBD_STBL_KEY_HC_OBJ_HISTORYSOCIAL</T>
+  <T n="tooltip">0xTBD_STBL_KEY_HC_OBJ_HISTORYSOCIAL_TT</T>
   <V n="objective_completion_type" t="iterations">
     <U n="iterations">
       <T n="iterations_required_to_pass">1</T>

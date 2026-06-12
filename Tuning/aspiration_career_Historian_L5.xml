@@ -7,8 +7,13 @@
 -->
 <I c="AspirationCareer" i="aspiration" m="aspirations.aspiration_tuning" n="aspiration_career_Historian_L5" s="TBD_INSTANCE_ID">
   <E n="aspiration_valid_age_type">TEEN_OR_OLDER</E>
+  <V n="objective_completion_type" t="complete_subset">
+    <U n="complete_subset">
+      <T n="number_required">1</T>
+    </U>
+  </V>
   <L n="objectives">
-    <T>objective_HC_RunTranscribeManuscript_x2</T>
+    <T>objective_HC_RunTranscribeManuscript</T>
     <T>objective_HC_RunZeitzeugen</T>
   </L>
 </I>
